@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Nova Partida - Área27 Sinuca</title>
+  <title>Modo Partida - Área27 Sinuca</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,58 +12,202 @@
     <header class="header">
       <div class="header-title">
         <div class="logo-badge">🎱</div>
-        <h1>Nova Partida</h1>
+        <h1>Partida</h1>
       </div>
-      <a href="index.html" class="back-btn">← Voltar</a>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div id="user-status-container"></div>
+        <a href="index.html" class="back-btn">← Voltar</a>
+      </div>
     </header>
 
     <main>
-      <!-- Quick Add Player Form -->
-      <div class="card" style="margin-bottom: 20px;">
-        <h2 style="font-size: 1.1rem; margin-bottom: 14px;">👤 Cadastrar Jogador Rápido</h2>
-        <form id="form-quick-player">
-          <div class="form-group">
-            <label class="form-label" for="quick-nome">Nome do Jogador</label>
-            <input type="text" id="quick-nome" class="form-input" placeholder="Ex: Cristiano" required>
-          </div>
+      <!-- Auth Guard Container (If user is not logged in) -->
+      <div id="match-auth-guard" class="card hidden">
+        <h2 style="font-size: 1.1rem; margin-bottom: 10px; color: var(--gold);">⚠️ Identificação Necessária</h2>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px;">
+          Para iniciar ou entrar em uma partida, você precisa estar cadastrado e logado.
+        </p>
 
-          <div class="form-group">
-            <label class="form-label" for="quick-telefone">Telefone (opcional)</label>
-            <input type="tel" id="quick-telefone" class="form-input" placeholder="Ex: 27999999999">
-          </div>
+        <div class="tabs-nav">
+          <button id="guard-tab-register" class="tab-btn active" onclick="switchGuardTab('register')">Cadastrar</button>
+          <button id="guard-tab-login" class="tab-btn" onclick="switchGuardTab('login')">Entrar</button>
+        </div>
 
-          <button type="submit" class="btn btn-secondary">➕ Cadastrar Jogador</button>
+        <form id="guard-form-register">
+          <div class="form-group">
+            <label class="form-label" for="guard-nome">Nome Completo *</label>
+            <input type="text" id="guard-nome" class="form-input" placeholder="Ex: Cristiano" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="guard-telefone">Telefone *</label>
+            <input type="tel" id="guard-telefone" class="form-input" placeholder="Ex: 27999999999" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="guard-senha">Senha PIN (4 dígitos numéricos) *</label>
+            <input type="password" id="guard-senha" class="form-input" placeholder="Ex: 1234" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Cadastrar e Continuar</button>
         </form>
-      </div>
 
-      <!-- Match Registration Form -->
-      <div class="card">
-        <h2 style="font-size: 1.1rem; margin-bottom: 14px;">🏆 Seleção da Partida</h2>
-        <form id="form-match">
+        <form id="guard-form-login" class="hidden">
           <div class="form-group">
-            <label class="form-label" for="playerA">Jogador A</label>
-            <select id="playerA" class="form-select" required>
+            <label class="form-label" for="guard-login-select">Selecione seu Perfil ou Digite o Telefone</label>
+            <select id="guard-login-select" class="form-select">
               <option value="">Carregando jogadores...</option>
             </select>
           </div>
-
           <div class="form-group">
-            <label class="form-label" for="playerB">Jogador B</label>
-            <select id="playerB" class="form-select" required>
-              <option value="">Carregando jogadores...</option>
-            </select>
+            <label class="form-label" for="guard-login-telefone">Ou Telefone Cadastrado</label>
+            <input type="tel" id="guard-login-telefone" class="form-input" placeholder="Ex: 27999999999">
           </div>
-
           <div class="form-group">
-            <label class="form-label" for="winner">Vencedor</label>
-            <select id="winner" class="form-select" disabled required>
-              <option value="">Selecione Jogador A e B primeiro</option>
-            </select>
+            <label class="form-label" for="guard-login-senha">Senha PIN (4 dígitos numéricos) *</label>
+            <input type="password" id="guard-login-senha" class="form-input" placeholder="****" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
           </div>
-
-          <button type="submit" class="btn btn-primary">Registrar Partida</button>
+          <button type="submit" class="btn btn-secondary">Entrar na Conta</button>
         </form>
       </div>
+
+      <!-- Main Match Arena (For logged in users) -->
+      <div id="match-arena" class="hidden">
+
+        <!-- Invite Notification Banner (Displayed when current logged in user has a pending invite) -->
+        <div id="invite-pending-card" class="card hidden" style="margin-bottom: 20px; border-color: var(--gold); background: linear-gradient(135deg, #2A2410, #1E1E1E);">
+          <h3 style="color: var(--gold); font-size: 1.1rem; margin-bottom: 8px;">📩 Convite de Partida Recebido!</h3>
+          <p id="invite-banner-text" style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 16px;">
+            Você foi convidado para entrar em uma partida!
+          </p>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" onclick="respondInvite(true)">✅ Aceitar Convite</button>
+            <button class="btn btn-outline" style="border-color: var(--error-color); color: var(--error-color);" onclick="respondInvite(false)">❌ Recusar Convite</button>
+          </div>
+        </div>
+        
+        <!-- Active Match Panel (Displayed when a match is active) -->
+        <div id="active-match-panel" class="card hidden" style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span id="active-match-type-badge" class="badge-elo" style="font-size: 0.85rem;">PAR OU ÍMPAR (2P)</span>
+            <button onclick="cancelCurrentMatch()" style="background: none; border: none; color: var(--error-color); cursor: pointer; font-size: 0.85rem; font-weight: 600;">✖ Cancelar</button>
+          </div>
+
+          <!-- Room Code Box -->
+          <div class="code-box">
+            <div class="code-title">Código da Partida (4 Caracteres)</div>
+            <div id="active-room-code" class="code-display">----</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">
+              Outro jogador pode digitar este código para entrar na sala!
+            </div>
+          </div>
+
+          <!-- Roster Grid -->
+          <div id="active-roster-container" class="item-list" style="margin: 16px 0;">
+            <!-- Rendered dynamically by app.js -->
+          </div>
+
+          <!-- Match Action Controls -->
+          <div id="match-status-msg" style="text-align: center; font-size: 0.9rem; color: var(--gold); margin-bottom: 14px;">
+            ⏳ Aguardando jogadores aceitarem os convites...
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button id="btn-open-finish-modal" class="btn btn-primary" onclick="openFinishModal()" disabled>
+              🏆 Finalizar Partida
+            </button>
+            <button id="btn-cancel-match" class="btn btn-outline" style="border-color: var(--error-color); color: var(--error-color);" onclick="cancelCurrentMatch()">
+              🚫 Cancelar Partida
+            </button>
+          </div>
+        </div>
+
+        <!-- Create or Join Lobby Cards (Displayed when no match is active) -->
+        <div id="match-lobby">
+          <div class="tabs-nav">
+            <button id="tab-btn-create-match" class="tab-btn active" onclick="switchMatchTab('create')">Criar Partida</button>
+            <button id="tab-btn-join-match" class="tab-btn" onclick="switchMatchTab('join')">Entrar por Código</button>
+          </div>
+
+          <!-- Create Match Card -->
+          <div id="card-create-match" class="card">
+            <h2 style="font-size: 1.1rem; margin-bottom: 14px;">➕ Criar Nova Partida</h2>
+            <form id="form-create-match">
+              
+              <!-- Select Match Type -->
+              <div class="form-group">
+                <label class="form-label" for="match-type-select">Tipo de Partida *</label>
+                <select id="match-type-select" class="form-select" onchange="handleMatchTypeChange()" required>
+                  <option value="par_impar_2p">🎱 Par ou Ímpar (Individual - 2 Jogadores)</option>
+                  <option value="par_impar_4p">👥 Par ou Ímpar (Em Dupla - 4 Jogadores)</option>
+                  <option value="5_bolas_3p">🖐️ 5 Bolas (3 Jogadores)</option>
+                </select>
+              </div>
+
+              <!-- Creator Slot -->
+              <div class="form-group">
+                <label class="form-label">Criador (Você)</label>
+                <div id="current-player-name-display" class="form-input" style="display: flex; align-items: center; color: var(--gold); font-weight: 700;">
+                  Carregando perfil...
+                </div>
+              </div>
+
+              <!-- Dynamic Player Selectors container based on match type -->
+              <div id="dynamic-invites-container">
+                <!-- Injected dynamically by JS (Player B, Player C, Player D) -->
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="margin-top: 10px;">⚡ Iniciar Partida</button>
+            </form>
+          </div>
+
+          <!-- Join Match Card -->
+          <div id="card-join-match" class="card hidden">
+            <h2 style="font-size: 1.1rem; margin-bottom: 14px;">🔗 Vincular-se a uma Partida</h2>
+            <form id="form-join-match">
+              <div class="form-group">
+                <label class="form-label" for="input-join-code">Código da Partida (4 Caracteres) *</label>
+                <input type="text" id="input-join-code" class="form-input" placeholder="Ex: A7K9" maxlength="4" style="text-transform: uppercase; font-size: 1.4rem; letter-spacing: 4px; font-weight: 700; text-align: center;" required>
+              </div>
+
+              <button type="submit" class="btn btn-secondary">🤝 Entrar na Partida</button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Finalize Match Modal Card -->
+      <div id="modal-finish-match" class="card hidden" style="margin-top: 20px; border-color: var(--primary);">
+        <h2 style="font-size: 1.2rem; margin-bottom: 14px; text-align: center; color: var(--gold);">🏁 Finalizar Partida</h2>
+
+        <form id="form-finish-match">
+          <div class="form-group">
+            <label class="form-label" for="finish-winner-select">Quem é o Vencedor? *</label>
+            <select id="finish-winner-select" class="form-select" required>
+              <option value="">Selecione o Vencedor</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Com quantas bolas o perdedor ficou? *</label>
+            <div id="balls-grid-container" class="balls-grid">
+              <div class="ball-opt" onclick="selectBalls(0)">0</div>
+              <div class="ball-opt" onclick="selectBalls(1)">1</div>
+              <div class="ball-opt" onclick="selectBalls(2)">2</div>
+              <div class="ball-opt" onclick="selectBalls(3)">3</div>
+              <div class="ball-opt" onclick="selectBalls(4)">4</div>
+              <div class="ball-opt" onclick="selectBalls(5)">5</div>
+              <div class="ball-opt" onclick="selectBalls(6)">6</div>
+              <div class="ball-opt" onclick="selectBalls(7)">7</div>
+            </div>
+            <input type="hidden" id="loser-balls-input" value="" required>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button type="button" class="btn btn-outline" onclick="closeFinishModal()">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Registrar Resultado</button>
+          </div>
+        </form>
+      </div>
+
     </main>
 
     <footer class="footer">

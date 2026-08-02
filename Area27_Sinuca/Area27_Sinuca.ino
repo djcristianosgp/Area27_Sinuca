@@ -29,6 +29,7 @@ struct Player {
   int id;
   String nome;
   String telefone;
+  String senha;
   int elo;
   int vitorias;
   int derrotas;
@@ -38,6 +39,30 @@ struct Player {
 Player players[MAX_PLAYERS];
 int playerCount = 0;
 int nextPlayerId = 1;
+
+// Active Match Memory Control
+struct ActiveMatch {
+  bool active;
+  String code;
+  String matchType; // "par_impar_2p", "par_impar_4p", "5_bolas_3p"
+  int maxPlayers;   // 2, 4, 3
+  int playerIds[4];
+  String invites[4]; // "creator", "pending", "accepted", "refused", "empty"
+  String status;    // "waiting", "in_progress", "finished"
+  int winner_id;    // Winner ID (or team ID)
+  int loser_balls;
+};
+
+ActiveMatch activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0};
+
+String generateMatchCode() {
+  const char chars[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  String code = "";
+  for (int i = 0; i < 4; i++) {
+    code += chars[random(0, sizeof(chars) - 1)];
+  }
+  return code;
+}
 
 // Load Wi-Fi Config from LittleFS (/wifi_config.json)
 bool loadWifiConfig() {
@@ -104,6 +129,7 @@ void savePlayersToFile() {
     file.print("    \"id\":" + String(players[i].id) + ",\n");
     file.print("    \"nome\":\"" + players[i].nome + "\",\n");
     file.print("    \"telefone\":\"" + players[i].telefone + "\",\n");
+    file.print("    \"senha\":\"" + players[i].senha + "\",\n");
     file.print("    \"elo\":" + String(players[i].elo) + ",\n");
     file.print("    \"vitorias\":" + String(players[i].vitorias) + ",\n");
     file.print("    \"derrotas\":" + String(players[i].derrotas) + "\n");
@@ -157,7 +183,15 @@ void loadPlayersFromFile() {
     int telEnd = content.indexOf("\"", telPos + 12);
     String tel = content.substring(telPos + 12, telEnd);
 
-    int eloPos = content.indexOf("\"elo\":", telEnd);
+    int senPos = content.indexOf("\"senha\":\"", telEnd);
+    int senEnd = telEnd;
+    String senha = "0000";
+    if (senPos != -1) {
+      senEnd = content.indexOf("\"", senPos + 9);
+      senha = content.substring(senPos + 9, senEnd);
+    }
+
+    int eloPos = content.indexOf("\"elo\":", senEnd);
     int eloEnd = content.indexOf(",", eloPos);
     int elo = content.substring(eloPos + 6, eloEnd).toInt();
 
@@ -170,7 +204,7 @@ void loadPlayersFromFile() {
     if (derEnd == -1) derEnd = content.indexOf("}", derPos);
     int der = content.substring(derPos + 11, derEnd).toInt();
 
-    players[playerCount] = {id, nome, tel, elo, vit, der};
+    players[playerCount] = {id, nome, tel, senha, elo, vit, der};
     if (id >= nextPlayerId) nextPlayerId = id + 1;
     playerCount++;
 
@@ -180,7 +214,7 @@ void loadPlayersFromFile() {
   Serial.printf("[STORAGE] Carregados %d jogadores.\n", playerCount);
 }
 
-// Convert Players Array to JSON String
+// Convert Players Array to JSON String (Omits passwords for safety)
 String getPlayersJSON() {
   String json = "[\n";
   for (int i = 0; i < playerCount; i++) {
@@ -357,7 +391,7 @@ void handleGetPlayers() {
   server.send(200, "application/json", getPlayersJSON());
 }
 
-// API: POST /players
+// API: POST /players (Register Player)
 void handlePostPlayers() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   if (!server.hasArg("plain")) {
@@ -370,7 +404,7 @@ void handlePostPlayers() {
   int nomePos = body.indexOf("\"nome\":\"");
   if (nomePos == -1) nomePos = body.indexOf("\"nome\": \"");
   if (nomePos == -1) {
-    server.send(400, "application/json", "{\"error\":\"Nome invalido\"}");
+    server.send(400, "application/json", "{\"error\":\"Nome obrigatório\"}");
     return;
   }
   int nomeStart = body.indexOf("\"", nomePos + 6) + 1;
@@ -386,14 +420,97 @@ void handlePostPlayers() {
     telefone     = body.substring(telStart, telEnd);
   }
 
+  String senha = "";
+  int senPos = body.indexOf("\"senha\":\"");
+  if (senPos == -1) senPos = body.indexOf("\"senha\": \"");
+  if (senPos != -1) {
+    int senStart = body.indexOf("\"", senPos + 7) + 1;
+    int senEnd   = body.indexOf("\"", senStart);
+    senha        = body.substring(senStart, senEnd);
+  }
+
+  if (nome.length() == 0) {
+    server.send(400, "application/json", "{\"error\":\"Nome é obrigatório\"}");
+    return;
+  }
+
+  if (telefone.length() == 0) {
+    server.send(400, "application/json", "{\"error\":\"Telefone é obrigatório\"}");
+    return;
+  }
+
+  if (senha.length() != 4) {
+    server.send(400, "application/json", "{\"error\":\"Senha deve ter exatamente 4 dígitos numéricos\"}");
+    return;
+  }
+
+  for (size_t i = 0; i < senha.length(); i++) {
+    if (!isDigit(senha.charAt(i))) {
+      server.send(400, "application/json", "{\"error\":\"A senha deve conter apenas números (4 dígitos)\"}");
+      return;
+    }
+  }
+
   if (playerCount < MAX_PLAYERS) {
-    players[playerCount] = {nextPlayerId++, nome, telefone, 1000, 0, 0};
+    int newId = nextPlayerId++;
+    players[playerCount] = {newId, nome, telefone, senha, 1000, 0, 0};
     playerCount++;
     savePlayersToFile();
 
-    server.send(201, "application/json", "{\"success\":true,\"id\":" + String(nextPlayerId - 1) + "}");
+    server.send(201, "application/json", "{\"success\":true,\"id\":" + String(newId) + ",\"nome\":\"" + nome + "\",\"telefone\":\"" + telefone + "\"}");
   } else {
     server.send(400, "application/json", "{\"error\":\"Limite de jogadores atingido\"}");
+  }
+}
+
+// API: POST /players/login
+void handleLoginPlayer() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+
+  String telefone = "";
+  int telPos = body.indexOf("\"telefone\":\"");
+  if (telPos == -1) telPos = body.indexOf("\"telefone\": \"");
+  if (telPos != -1) {
+    int telStart = body.indexOf("\"", telPos + 10) + 1;
+    int telEnd   = body.indexOf("\"", telStart);
+    telefone     = body.substring(telStart, telEnd);
+  }
+
+  int idVal = 0;
+  int idPos = body.indexOf("\"id\":");
+  if (idPos != -1) {
+    idVal = body.substring(idPos + 5).toInt();
+  }
+
+  String senha = "";
+  int senPos = body.indexOf("\"senha\":\"");
+  if (senPos == -1) senPos = body.indexOf("\"senha\": \"");
+  if (senPos != -1) {
+    int senStart = body.indexOf("\"", senPos + 7) + 1;
+    int senEnd   = body.indexOf("\"", senStart);
+    senha        = body.substring(senStart, senEnd);
+  }
+
+  Player* matched = nullptr;
+  for (int i = 0; i < playerCount; i++) {
+    if ((idVal > 0 && players[i].id == idVal) || (telefone.length() > 0 && players[i].telefone == telefone)) {
+      if (players[i].senha == senha) {
+        matched = &players[i];
+        break;
+      }
+    }
+  }
+
+  if (matched) {
+    server.send(200, "application/json", "{\"success\":true,\"player\":{\"id\":" + String(matched->id) + ",\"nome\":\"" + matched->nome + "\",\"telefone\":\"" + matched->telefone + "\",\"elo\":" + String(matched->elo) + "}}");
+  } else {
+    server.send(401, "application/json", "{\"error\":\"Telefone ou senha de 4 dígitos incorreta.\"}");
   }
 }
 
@@ -460,8 +577,33 @@ void handleGetRanking() {
   server.send(200, "application/json", getPlayersJSON());
 }
 
-// API: POST /match
-void handlePostMatch() {
+// API: POST /settings/auth
+void handleSettingsAuth() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+  String pin = "";
+  int pinPos = body.indexOf("\"pin\":\"");
+  if (pinPos == -1) pinPos = body.indexOf("\"pin\": \"");
+  if (pinPos != -1) {
+    int pStart = body.indexOf("\"", pinPos + 5) + 1;
+    int pEnd   = body.indexOf("\"", pStart);
+    pin        = body.substring(pStart, pEnd);
+  }
+
+  if (pin == "0000") {
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Acesso administrativo liberado\"}");
+  } else {
+    server.send(401, "application/json", "{\"error\":\"PIN de Administrador incorreto. Tente 0000.\"}");
+  }
+}
+
+// API: POST /match/create
+void handleCreateMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   if (!server.hasArg("plain")) {
     server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
@@ -470,48 +612,363 @@ void handlePostMatch() {
 
   String body = server.arg("plain");
 
-  int pAPos = body.indexOf("\"playerA\":");
-  int pAVal = body.substring(pAPos + 10).toInt();
-
-  int pBPos = body.indexOf("\"playerB\":");
-  int pBVal = body.substring(pBPos + 10).toInt();
-
-  int winPos = body.indexOf("\"winner\":");
-  int winVal = body.substring(winPos + 9).toInt();
-
-  Player* pA = nullptr;
-  Player* pB = nullptr;
-
-  for (int i = 0; i < playerCount; i++) {
-    if (players[i].id == pAVal) pA = &players[i];
-    if (players[i].id == pBVal) pB = &players[i];
+  String type = "par_impar_2p";
+  int typePos = body.indexOf("\"matchType\":\"");
+  if (typePos == -1) typePos = body.indexOf("\"matchType\": \"");
+  if (typePos != -1) {
+    int tStart = body.indexOf("\"", typePos + 11) + 1;
+    int tEnd   = body.indexOf("\"", tStart);
+    type       = body.substring(tStart, tEnd);
   }
 
-  if (!pA || !pB || (winVal != pAVal && winVal != pBVal)) {
-    server.send(400, "application/json", "{\"error\":\"Jogadores invalidos\"}");
+  int pAPos = body.indexOf("\"playerA\":");
+  if (pAPos == -1) pAPos = body.indexOf("\"creator\":");
+  if (pAPos == -1) {
+    server.send(400, "application/json", "{\"error\":\"Criador da partida obrigatório\"}");
+    return;
+  }
+  int creatorId = body.substring(pAPos + 10).toInt();
+
+  int maxP = 2;
+  if (type == "par_impar_4p") maxP = 4;
+  else if (type == "5_bolas_3p") maxP = 3;
+
+  String code = generateMatchCode();
+  activeMatch.active = true;
+  activeMatch.code = code;
+  activeMatch.matchType = type;
+  activeMatch.maxPlayers = maxP;
+  activeMatch.winner_id = 0;
+  activeMatch.loser_balls = 0;
+
+  for (int i = 0; i < 4; i++) {
+    activeMatch.playerIds[i] = 0;
+    activeMatch.invites[i] = "empty";
+  }
+
+  activeMatch.playerIds[0] = creatorId;
+  activeMatch.invites[0] = "creator";
+
+  // Parse additional invited players if provided in array "invited" or fields "playerB", "playerC", "playerD"
+  int pBVal = 0, pCVal = 0, pDVal = 0;
+  int pBPos = body.indexOf("\"playerB\":");
+  if (pBPos != -1) pBVal = body.substring(pBPos + 10).toInt();
+  int pCPos = body.indexOf("\"playerC\":");
+  if (pCPos != -1) pCVal = body.substring(pCPos + 10).toInt();
+  int pDPos = body.indexOf("\"playerD\":");
+  if (pDPos != -1) pDVal = body.substring(pDPos + 10).toInt();
+
+  if (pBVal > 0 && maxP >= 2) {
+    activeMatch.playerIds[1] = pBVal;
+    activeMatch.invites[1] = "pending";
+  }
+  if (pCVal > 0 && maxP >= 3) {
+    activeMatch.playerIds[2] = pCVal;
+    activeMatch.invites[2] = "pending";
+  }
+  if (pDVal > 0 && maxP >= 4) {
+    activeMatch.playerIds[3] = pDVal;
+    activeMatch.invites[3] = "pending";
+  }
+
+  activeMatch.status = "waiting";
+
+  server.send(200, "application/json", "{\"success\":true,\"code\":\"" + code + "\",\"matchType\":\"" + type + "\",\"status\":\"waiting\"}");
+}
+
+// API: POST /match/join
+void handleJoinMatch() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
     return;
   }
 
-  // ELO Rating Calculation (K = 32)
-  float expectedA = 1.0 / (1.0 + pow(10.0, (pB->elo - pA->elo) / 400.0));
-  float expectedB = 1.0 / (1.0 + pow(10.0, (pA->elo - pB->elo) / 400.0));
+  String body = server.arg("plain");
 
-  float scoreA = (winVal == pAVal) ? 1.0 : 0.0;
-  float scoreB = (winVal == pBVal) ? 1.0 : 0.0;
+  String inputCode = "";
+  int codePos = body.indexOf("\"code\":\"");
+  if (codePos == -1) codePos = body.indexOf("\"code\": \"");
+  if (codePos != -1) {
+    int cStart = body.indexOf("\"", codePos + 6) + 1;
+    int cEnd   = body.indexOf("\"", cStart);
+    inputCode  = body.substring(cStart, cEnd);
+  }
 
-  pA->elo += (int)(32 * (scoreA - expectedA));
-  pB->elo += (int)(32 * (scoreB - expectedB));
+  int pVal = 0;
+  int pPos = body.indexOf("\"player\":");
+  if (pPos == -1) pPos = body.indexOf("\"playerB\":");
+  if (pPos != -1) {
+    pVal = body.substring(pPos + 9).toInt();
+  }
 
-  if (winVal == pAVal) {
-    pA->vitorias++;
-    pB->derrotas++;
+  inputCode.toUpperCase();
+  inputCode.trim();
+
+  if (!activeMatch.active) {
+    server.send(400, "application/json", "{\"error\":\"Nenhuma partida aberta no momento\"}");
+    return;
+  }
+
+  if (activeMatch.code != inputCode) {
+    server.send(400, "application/json", "{\"error\":\"Código da partida incorreto\"}");
+    return;
+  }
+
+  // Check if player is already in match
+  for (int i = 0; i < activeMatch.maxPlayers; i++) {
+    if (activeMatch.playerIds[i] == pVal) {
+      server.send(400, "application/json", "{\"error\":\"Você já está vinculado nesta partida\"}");
+      return;
+    }
+  }
+
+  // Find first empty slot
+  int emptySlot = -1;
+  for (int i = 0; i < activeMatch.maxPlayers; i++) {
+    if (activeMatch.playerIds[i] == 0) {
+      emptySlot = i;
+      break;
+    }
+  }
+
+  if (emptySlot == -1) {
+    server.send(400, "application/json", "{\"error\":\"A sala já atingiu o limite de jogadores\"}");
+    return;
+  }
+
+  activeMatch.playerIds[emptySlot] = pVal;
+  activeMatch.invites[emptySlot] = "pending";
+
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Solicitação de vínculo realizada! Aguardando aceite.\",\"slot\":" + String(emptySlot) + "}");
+}
+
+// API: POST /match/respond (Accept or Refuse Invite)
+void handleRespondInvite() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+
+  int pVal = 0;
+  int pPos = body.indexOf("\"player\":");
+  if (pPos != -1) pVal = body.substring(pPos + 9).toInt();
+
+  bool accept = true;
+  if (body.indexOf("\"accept\":false") != -1 || body.indexOf("\"accept\": false") != -1) {
+    accept = false;
+  }
+
+  if (!activeMatch.active) {
+    server.send(400, "application/json", "{\"error\":\"Nenhuma partida ativa\"}");
+    return;
+  }
+
+  int slotIndex = -1;
+  for (int i = 0; i < activeMatch.maxPlayers; i++) {
+    if (activeMatch.playerIds[i] == pVal) {
+      slotIndex = i;
+      break;
+    }
+  }
+
+  if (slotIndex == -1) {
+    server.send(400, "application/json", "{\"error\":\"Jogador não encontrado na partida ativa\"}");
+    return;
+  }
+
+  if (accept) {
+    activeMatch.invites[slotIndex] = "accepted";
+
+    // Check if all maxPlayers slots are filled and accepted/creator
+    bool allReady = true;
+    for (int i = 0; i < activeMatch.maxPlayers; i++) {
+      if (activeMatch.playerIds[i] == 0 || (activeMatch.invites[i] != "creator" && activeMatch.invites[i] != "accepted")) {
+        allReady = false;
+        break;
+      }
+    }
+
+    if (allReady) {
+      activeMatch.status = "in_progress";
+    }
+
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Convite aceito!\",\"status\":\"" + activeMatch.status + "\"}");
   } else {
-    pB->vitorias++;
-    pA->derrotas++;
+    // Refused invite -> free slot
+    activeMatch.playerIds[slotIndex] = 0;
+    activeMatch.invites[slotIndex] = "empty";
+    activeMatch.status = "waiting";
+
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Convite recusado. A vaga foi liberada.\"}");
+  }
+}
+
+// API: GET /match/active
+void handleGetActiveMatch() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!activeMatch.active) {
+    server.send(200, "application/json", "{\"active\":false}");
+    return;
+  }
+
+  String json = "{\n";
+  json += "  \"active\": true,\n";
+  json += "  \"code\": \"" + activeMatch.code + "\",\n";
+  json += "  \"matchType\": \"" + activeMatch.matchType + "\",\n";
+  json += "  \"maxPlayers\": " + String(activeMatch.maxPlayers) + ",\n";
+  json += "  \"status\": \"" + activeMatch.status + "\",\n";
+  json += "  \"winner\": " + String(activeMatch.winner_id) + ",\n";
+  json += "  \"loser_balls\": " + String(activeMatch.loser_balls) + ",\n";
+  json += "  \"players\": [\n";
+
+  for (int i = 0; i < activeMatch.maxPlayers; i++) {
+    int pId = activeMatch.playerIds[i];
+    Player* pObj = nullptr;
+    if (pId > 0) {
+      for (int k = 0; k < playerCount; k++) {
+        if (players[k].id == pId) { pObj = &players[k]; break; }
+      }
+    }
+
+    json += "    {\n";
+    json += "      \"slot\": " + String(i) + ",\n";
+    json += "      \"id\": " + String(pId) + ",\n";
+    json += "      \"nome\": \"" + (pObj ? pObj->nome : (pId > 0 ? "Jogador" : "Vaga Livre")) + "\",\n";
+    json += "      \"elo\": " + String(pObj ? pObj->elo : 1000) + ",\n";
+    json += "      \"invite\": \"" + activeMatch.invites[i] + "\"\n";
+    json += "    }";
+    if (i < activeMatch.maxPlayers - 1) json += ",";
+    json += "\n";
+  }
+
+  json += "  ]\n";
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
+
+// API: POST /match/finish
+void handleFinishMatch() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+
+  int winPos = body.indexOf("\"winner\":");
+  if (winPos == -1) {
+    server.send(400, "application/json", "{\"error\":\"Informe o vencedor da partida\"}");
+    return;
+  }
+  int winVal = body.substring(winPos + 9).toInt();
+
+  int loserBalls = 0;
+  int ballsPos = body.indexOf("\"loserBalls\":");
+  if (ballsPos == -1) ballsPos = body.indexOf("\"loser_balls\":");
+  if (ballsPos != -1) {
+    loserBalls = body.substring(ballsPos + 12).toInt();
+  }
+
+  if (loserBalls < 0 || loserBalls > 7) {
+    server.send(400, "application/json", "{\"error\":\"Quantidade de bolas deve ser entre 0 e 7\"}");
+    return;
+  }
+
+  // Update ELO and Stats based on matchType
+  if (activeMatch.matchType == "par_impar_2p") {
+    int p1 = activeMatch.playerIds[0];
+    int p2 = activeMatch.playerIds[1];
+
+    Player* pA = nullptr;
+    Player* pB = nullptr;
+    for (int i = 0; i < playerCount; i++) {
+      if (players[i].id == p1) pA = &players[i];
+      if (players[i].id == p2) pB = &players[i];
+    }
+
+    if (pA && pB) {
+      float expectedA = 1.0 / (1.0 + pow(10.0, (pB->elo - pA->elo) / 400.0));
+      float expectedB = 1.0 / (1.0 + pow(10.0, (pA->elo - pB->elo) / 400.0));
+
+      float scoreA = (winVal == p1) ? 1.0 : 0.0;
+      float scoreB = (winVal == p2) ? 1.0 : 0.0;
+
+      pA->elo += (int)(32 * (scoreA - expectedA));
+      pB->elo += (int)(32 * (scoreB - expectedB));
+
+      if (winVal == p1) { pA->vitorias++; pB->derrotas++; }
+      else { pB->vitorias++; pA->derrotas++; }
+    }
+  } else if (activeMatch.matchType == "par_impar_4p") {
+    // Dupla 1 (Slots 0 & 1) vs Dupla 2 (Slots 2 & 3)
+    // winVal == 1 (Dupla 1) or winVal == 2 (Dupla 2) or winVal == playerId of someone in winning team
+    bool team1Wins = (winVal == 1 || winVal == activeMatch.playerIds[0] || winVal == activeMatch.playerIds[1]);
+
+    for (int i = 0; i < 4; i++) {
+      int id = activeMatch.playerIds[i];
+      if (id > 0) {
+        for (int k = 0; k < playerCount; k++) {
+          if (players[k].id == id) {
+            bool isTeam1 = (i == 0 || i == 1);
+            if ((team1Wins && isTeam1) || (!team1Wins && !isTeam1)) {
+              players[k].vitorias++;
+              players[k].elo += 20;
+            } else {
+              players[k].derrotas++;
+              players[k].elo = max(100, players[k].elo - 20);
+            }
+            break;
+          }
+        }
+      }
+    }
+  } else if (activeMatch.matchType == "5_bolas_3p") {
+    // 3 Individual Players
+    for (int i = 0; i < 3; i++) {
+      int id = activeMatch.playerIds[i];
+      if (id > 0) {
+        for (int k = 0; k < playerCount; k++) {
+          if (players[k].id == id) {
+            if (id == winVal) {
+              players[k].vitorias++;
+              players[k].elo += 25;
+            } else {
+              players[k].derrotas++;
+              players[k].elo = max(100, players[k].elo - 12);
+            }
+            break;
+          }
+        }
+      }
+    }
   }
 
   savePlayersToFile();
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida registrada com sucesso.\"}");
+
+  activeMatch.status = "finished";
+  activeMatch.winner_id = winVal;
+  activeMatch.loser_balls = loserBalls;
+
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida registrada e finalizada com sucesso!\"}");
+}
+
+// API: POST /match/cancel
+void handleCancelMatch() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0};
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida cancelada\"}");
+}
+
+// API: POST /match (Legacy Endpoint)
+void handlePostMatch() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  handleFinishMatch();
 }
 
 void startAPMode() {
@@ -578,16 +1035,24 @@ void setup() {
   }
 
   // Setup REST API Routes
-  server.on("/players",       HTTP_GET,  handleGetPlayers);
-  server.on("/players",       HTTP_POST, handlePostPlayers);
-  server.on("/players/delete",HTTP_POST, handleDeletePlayer);
-  server.on("/players/clear", HTTP_POST, handleClearPlayers);
-  server.on("/ranking",       HTTP_GET,  handleGetRanking);
-  server.on("/ranking/reset", HTTP_POST, handleResetRanking);
-  server.on("/match",         HTTP_POST, handlePostMatch);
-  server.on("/wifi/scan",     HTTP_GET,  handleWifiScan);
-  server.on("/wifi/save",     HTTP_POST, handleWifiSave);
-  server.on("/wifi/reset",    HTTP_POST, handleWifiReset);
+  server.on("/players",        HTTP_GET,  handleGetPlayers);
+  server.on("/players",        HTTP_POST, handlePostPlayers);
+  server.on("/players/login",  HTTP_POST, handleLoginPlayer);
+  server.on("/players/delete", HTTP_POST, handleDeletePlayer);
+  server.on("/players/clear",  HTTP_POST, handleClearPlayers);
+  server.on("/ranking",        HTTP_GET,  handleGetRanking);
+  server.on("/ranking/reset",  HTTP_POST, handleResetRanking);
+  server.on("/settings/auth",  HTTP_POST, handleSettingsAuth);
+  server.on("/match/create",   HTTP_POST, handleCreateMatch);
+  server.on("/match/join",     HTTP_POST, handleJoinMatch);
+  server.on("/match/respond",  HTTP_POST, handleRespondInvite);
+  server.on("/match/active",   HTTP_GET,  handleGetActiveMatch);
+  server.on("/match/finish",   HTTP_POST, handleFinishMatch);
+  server.on("/match/cancel",   HTTP_POST, handleCancelMatch);
+  server.on("/match",          HTTP_POST, handlePostMatch);
+  server.on("/wifi/scan",      HTTP_GET,  handleWifiScan);
+  server.on("/wifi/save",      HTTP_POST, handleWifiSave);
+  server.on("/wifi/reset",     HTTP_POST, handleWifiReset);
 
   // Captive Portal Redirect / Static Web Server
   server.onNotFound([]() {

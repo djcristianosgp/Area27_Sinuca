@@ -431,3 +431,164 @@ html, body {
 .hidden {
   display: none !important;
 }
+
+/* User Profile & Auth Styles */
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(59, 147, 193, 0.15);
+  border: 1px solid rgba(59, 147, 193, 0.3);
+  color: var(--primary);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.user-badge button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.user-badge button:hover {
+  color: var(--error-color);
+}
+
+/* Match Room Code Display */
+.code-box {
+  background: linear-gradient(135deg, #1A2634, #121E2A);
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+  margin: 16px 0;
+}
+
+.code-title {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.code-display {
+  font-family: monospace, sans-serif;
+  font-size: 2.8rem;
+  font-weight: 900;
+  letter-spacing: 8px;
+  color: var(--gold);
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
+}
+
+/* Versus Arena Display */
+.versus-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #161616;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.versus-player {
+  flex: 1;
+  text-align: center;
+}
+
+.versus-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.versus-elo {
+  font-size: 0.8rem;
+  color: var(--primary);
+}
+
+.versus-divider {
+  width: 42px;
+  height: 42px;
+  background: var(--card-bg);
+  border: 1px solid var(--primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 0.9rem;
+  color: var(--primary);
+  box-shadow: 0 0 10px rgba(59, 147, 193, 0.3);
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+/* Loser Remaining Balls Selector (0 to 7) */
+.balls-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ball-opt {
+  background: #161616;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ball-opt:active {
+  transform: scale(0.94);
+}
+
+.ball-opt.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #FFFFFF;
+  box-shadow: 0 0 10px rgba(59, 147, 193, 0.5);
+}
+
+.tabs-nav {
+  display: flex;
+  background: #161616;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  gap: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tab-btn.active {
+  background: var(--card-bg);
+  color: var(--primary);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+

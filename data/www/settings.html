@@ -18,31 +18,51 @@
     </header>
 
     <main>
-      <!-- Config 1: Wi-Fi -->
-      <div class="card" style="margin-bottom: 16px;">
-        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">📶 Rede Wi-Fi</h2>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
-          Reinicia o ESP8266 no modo Ponto de Acesso (Area27-Sinuca-Config) para conectar a outro roteador.
+      <!-- Admin PIN Protection Card (Requires PIN 0000) -->
+      <div id="admin-pin-card" class="card" style="margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--gold);">🔒 Acesso Restrito</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+          Informe o PIN de Administrador (0000) para acessar as configurações do sistema.
         </p>
-        <button id="btn-reset-wifi" class="btn btn-secondary">Trocar de Rede Wi-Fi</button>
+
+        <form id="form-admin-pin">
+          <div class="form-group">
+            <label class="form-label" for="admin-pin-input">PIN de Administrador (4 dígitos)</label>
+            <input type="password" id="admin-pin-input" class="form-input" placeholder="0000" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" style="text-align: center; font-size: 1.5rem; letter-spacing: 6px;" required>
+          </div>
+
+          <button type="submit" class="btn btn-primary">🔓 Acessar Configurações</button>
+        </form>
       </div>
 
-      <!-- Config 2: Zerar Ranking -->
-      <div class="card" style="margin-bottom: 16px;">
-        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🏆 Zerar Ranking</h2>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
-          Reseta todas as estatísticas (vitórias, derrotas e ELO para 1000), mantendo o cadastro dos jogadores.
-        </p>
-        <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
-      </div>
+      <!-- Settings Content (Protected by PIN 0000) -->
+      <div id="settings-content" class="hidden">
+        <!-- Config 1: Wi-Fi -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px;">📶 Rede Wi-Fi</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+            Reinicia o ESP8266 no modo Ponto de Acesso (Area27-Sinuca-Config) para conectar a outro roteador.
+          </p>
+          <button id="btn-reset-wifi" class="btn btn-secondary">Trocar de Rede Wi-Fi</button>
+        </div>
 
-      <!-- Config 3: Excluir Jogadores -->
-      <div class="card" style="margin-bottom: 16px;">
-        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Gerenciar Jogadores</h2>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
-          Apaga permanentemente todos os jogadores cadastrados e reinicia o banco de dados.
-        </p>
-        <button id="btn-clear-players" class="btn btn-danger">Excluir Todos os Jogadores</button>
+        <!-- Config 2: Zerar Ranking -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🏆 Zerar Ranking</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+            Reseta todas as estatísticas (vitórias, derrotas e ELO para 1000), mantendo o cadastro dos jogadores.
+          </p>
+          <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
+        </div>
+
+        <!-- Config 3: Excluir Jogadores -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Gerenciar Jogadores</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+            Apaga permanentemente todos os jogadores cadastrados e reinicia o banco de dados.
+          </p>
+          <button id="btn-clear-players" class="btn btn-danger">Excluir Todos os Jogadores</button>
+        </div>
       </div>
     </main>
 

@@ -1,0 +1,21 @@
+# PlatformIO & Build files
+.pio/
+.piobuild/
+.piolibdeps/
+build/
+bin/
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Local persistence temporary files & backups
+*.tmp
+*.log
+*.bak
+
+# OS junk
+.DS_Store
+Thumbs.db

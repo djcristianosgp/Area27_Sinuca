@@ -14,29 +14,69 @@
         <div class="logo-badge">👥</div>
         <h1>Jogadores</h1>
       </div>
-      <a href="index.html" class="back-btn">← Voltar</a>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div id="user-status-container"></div>
+        <a href="index.html" class="back-btn">← Voltar</a>
+      </div>
     </header>
 
     <main>
-      <div class="card" style="margin-bottom: 20px;">
-        <h2 style="font-size: 1.1rem; margin-bottom: 14px;">Novo Jogador</h2>
+      <!-- Navigation Tabs for Auth -->
+      <div class="tabs-nav">
+        <button id="tab-btn-register" class="tab-btn active" onclick="switchAuthTab('register')">Cadastrar</button>
+        <button id="tab-btn-login" class="tab-btn" onclick="switchAuthTab('login')">Entrar (Login)</button>
+      </div>
+
+      <!-- Registration Card -->
+      <div id="card-register" class="card" style="margin-bottom: 20px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 14px;">📝 Cadastrar Novo Jogador</h2>
         <form id="form-player">
           <div class="form-group">
-            <label class="form-label" for="nome">Nome</label>
-            <input type="text" id="nome" class="form-input" placeholder="Ex: João" required>
+            <label class="form-label" for="nome">Nome *</label>
+            <input type="text" id="nome" class="form-input" placeholder="Ex: Cristiano" required>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="telefone">Telefone</label>
-            <input type="tel" id="telefone" class="form-input" placeholder="Ex: 27999999999">
+            <label class="form-label" for="telefone">Telefone *</label>
+            <input type="tel" id="telefone" class="form-input" placeholder="Ex: 27999999999" required>
           </div>
 
-          <button type="submit" class="btn btn-primary">Salvar Jogador</button>
+          <div class="form-group">
+            <label class="form-label" for="senha">Senha PIN (4 Dígitos Numéricos) *</label>
+            <input type="password" id="senha" class="form-input" placeholder="Ex: 1234" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Cadastrar e Entrar</button>
+        </form>
+      </div>
+
+      <!-- Login Card -->
+      <div id="card-login" class="card hidden" style="margin-bottom: 20px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 14px;">🔑 Fazer Login</h2>
+        <form id="form-login">
+          <div class="form-group">
+            <label class="form-label" for="login-player-select">Selecione seu Perfil ou digite seu Telefone</label>
+            <select id="login-player-select" class="form-select">
+              <option value="">Carregando jogadores...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="login-telefone">Ou Telefone Cadastrado</label>
+            <input type="tel" id="login-telefone" class="form-input" placeholder="Ex: 27999999999">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="login-senha">Senha PIN (4 dígitos) *</label>
+            <input type="password" id="login-senha" class="form-input" placeholder="****" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
+          </div>
+
+          <button type="submit" class="btn btn-secondary">Entrar na Conta</button>
         </form>
       </div>
 
       <div class="section-header">
-        <h2 class="section-title">Lista de Jogadores</h2>
+        <h2 class="section-title">Lista de Jogadores Cadastrados</h2>
       </div>
 
       <div id="players-container" class="item-list">

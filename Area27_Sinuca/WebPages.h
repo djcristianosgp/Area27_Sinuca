@@ -151,6 +151,9 @@ html, body {
 .btn-secondary { background: var(--secondary); color: var(--text-main); }
 .btn-secondary:active { background: var(--secondary-hover); transform: scale(0.98); }
 
+.btn-danger { background: #c62828; color: var(--text-main); }
+.btn-danger:active { background: #b71c1c; transform: scale(0.98); }
+
 .section-header { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 12px 0; }
 .section-title { font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
 .item-list { display: flex; flex-direction: column; gap: 10px; }
@@ -249,9 +252,12 @@ const API = {
   },
   getPlayers() { return this.request('/players'); },
   addPlayer(data) { return this.request('/players', { method: 'POST', body: JSON.stringify(data) }); },
+  deletePlayer(id) { return this.request('/players/delete', { method: 'POST', body: JSON.stringify({ id }) }); },
   clearPlayers() { return this.request('/players/clear', { method: 'POST' }); },
+  resetRanking() { return this.request('/ranking/reset', { method: 'POST' }); },
   getRanking() { return this.request('/ranking'); },
-  registerMatch(data) { return this.request('/match', { method: 'POST', body: JSON.stringify(data) }); }
+  registerMatch(data) { return this.request('/match', { method: 'POST', body: JSON.stringify(data) }); },
+  resetWifi() { return this.request('/wifi/reset', { method: 'POST' }); }
 };
 
 function showToast(message, type = 'success') {
@@ -285,9 +291,12 @@ async function initPlayersPage() {
             <span class="player-name">${escapeHtml(p.nome)}</span>
             <span class="player-phone">${escapeHtml(p.telefone || '-')}</span>
           </div>
-          <div class="player-stats">
-            <span class="badge-elo">${p.elo || 1000} ELO</span>
-            <div class="record">${p.vitorias || 0}V / ${p.derrotas || 0}D</div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="player-stats">
+              <span class="badge-elo">${p.elo || 1000} ELO</span>
+              <div class="record">${p.vitorias || 0}V / ${p.derrotas || 0}D</div>
+            </div>
+            <button onclick="handleDeleteSinglePlayer(${p.id}, '${escapeHtml(p.nome)}')" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;" title="Excluir Jogador">🗑️</button>
           </div>
         </div>
       `).join('');
@@ -295,6 +304,16 @@ async function initPlayersPage() {
       playerList.innerHTML = `<div class="empty-state">Erro ao carregar jogadores.</div>`;
     }
   }
+
+  window.handleDeleteSinglePlayer = async (id, nome) => {
+    if (confirm(`Deseja realmente excluir o jogador "${nome}"?`)) {
+      try {
+        await API.deletePlayer(id);
+        showToast(`Jogador "${nome}" excluído com sucesso!`, 'success');
+        await loadPlayers();
+      } catch (e) {}
+    }
+  };
 
   if (form) {
     form.addEventListener('submit', async (e) => {
@@ -487,6 +506,45 @@ async function initRankingPage() {
   }
 }
 
+function initSettingsPage() {
+  const resetWifiBtn = document.getElementById('btn-reset-wifi');
+  const resetRankingBtn = document.getElementById('btn-reset-ranking');
+  const clearPlayersBtn = document.getElementById('btn-clear-players');
+
+  if (resetWifiBtn) {
+    resetWifiBtn.addEventListener('click', async () => {
+      if (confirm('Deseja realmente resetar a rede Wi-Fi? O ESP8266 reiniciará no modo Ponto de Acesso (Area27-Sinuca-Config).')) {
+        try {
+          await API.resetWifi();
+          showToast('Wi-Fi resetado! Reiniciando...', 'success');
+        } catch (e) {}
+      }
+    });
+  }
+
+  if (resetRankingBtn) {
+    resetRankingBtn.addEventListener('click', async () => {
+      if (confirm('Deseja realmente zerar o ranking? Todas as vitórias, derrotas e ELO voltarão a 1000.')) {
+        try {
+          await API.resetRanking();
+          showToast('Estatísticas do ranking zeradas com sucesso!', 'success');
+        } catch (e) {}
+      }
+    });
+  }
+
+  if (clearPlayersBtn) {
+    clearPlayersBtn.addEventListener('click', async () => {
+      if (confirm('ATENÇÃO: Deseja EXCLUIR TODOS OS JOGADORES? Esta ação é irreversível!')) {
+        try {
+          await API.clearPlayers();
+          showToast('Todos os jogadores foram excluídos!', 'success');
+        } catch (e) {}
+      }
+    });
+  }
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -498,6 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('form-player')) initPlayersPage();
   if (document.getElementById('form-match') || document.getElementById('form-quick-player')) initMatchPage();
   if (document.getElementById('ranking-container')) initRankingPage();
+  if (document.getElementById('btn-reset-wifi') || document.getElementById('btn-clear-players')) initSettingsPage();
 });
 )rawliteral";
 
@@ -540,10 +599,16 @@ const char HTML_INDEX[] PROGMEM = R"rawliteral(
           <div class="card-title">Ranking</div>
         </div>
       </a>
-      <a href="about.html" class="card-link">
+      <a href="settings.html" class="card-link">
         <div class="card card-interactive">
-          <div class="card-icon">ℹ️</div>
-          <div class="card-title">Sobre</div>
+          <div class="card-icon">⚙️</div>
+          <div class="card-title">Configurações</div>
+        </div>
+      </a>
+      <a href="about.html" class="card-link" style="grid-column: span 2;">
+        <div class="card card-interactive" style="min-height: 80px; flex-direction: row; gap: 12px;">
+          <div class="card-icon" style="margin-bottom: 0; font-size: 1.6rem;">ℹ️</div>
+          <div class="card-title">Sobre o Sistema</div>
         </div>
       </a>
     </main>
@@ -626,7 +691,6 @@ const char HTML_MATCH[] PROGMEM = R"rawliteral(
       <a href="index.html" class="back-btn">← Voltar</a>
     </header>
     <main>
-      <!-- Cadastrar Jogador Rápido -->
       <div class="card" style="margin-bottom: 20px;">
         <h2 style="font-size: 1.1rem; margin-bottom: 14px;">👤 Cadastrar Jogador Rápido</h2>
         <form id="form-quick-player">
@@ -642,7 +706,6 @@ const char HTML_MATCH[] PROGMEM = R"rawliteral(
         </form>
       </div>
 
-      <!-- Registrar Partida -->
       <div class="card">
         <h2 style="font-size: 1.1rem; margin-bottom: 14px;">🏆 Seleção da Partida</h2>
         <form id="form-match">
@@ -709,6 +772,59 @@ const char HTML_RANKING[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 // ==========================================
+// settings.html
+// ==========================================
+const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Configurações - Área27 Sinuca</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="header-title">
+        <div class="logo-badge">⚙️</div>
+        <h1>Configurações</h1>
+      </div>
+      <a href="index.html" class="back-btn">← Voltar</a>
+    </header>
+    <main>
+      <div class="card" style="margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">📶 Rede Wi-Fi</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+          Reinicia o ESP8266 no modo Ponto de Acesso (Area27-Sinuca-Config) para conectar a outro roteador.
+        </p>
+        <button id="btn-reset-wifi" class="btn btn-secondary">Trocar de Rede Wi-Fi</button>
+      </div>
+
+      <div class="card" style="margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🏆 Zerar Ranking</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+          Reseta todas as estatísticas (vitórias, derrotas e ELO para 1000), mantendo o cadastro dos jogadores.
+        </p>
+        <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
+      </div>
+
+      <div class="card" style="margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Gerenciar Jogadores</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+          Apaga permanentemente todos os jogadores cadastrados do sistema.
+        </p>
+        <button id="btn-clear-players" class="btn btn-danger">Excluir Todos os Jogadores</button>
+      </div>
+    </main>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
+)rawliteral";
+
+// ==========================================
 // about.html
 // ==========================================
 const char HTML_ABOUT[] PROGMEM = R"rawliteral(
@@ -745,6 +861,102 @@ const char HTML_ABOUT[] PROGMEM = R"rawliteral(
     <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
   </div>
   <script src="app.js"></script>
+</body>
+</html>
+)rawliteral";
+
+// ==========================================
+// wifi.html (Captive Portal Configuration Page)
+// ==========================================
+const char HTML_WIFI_CONFIG[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Configuração Wi-Fi - Área27 Sinuca</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="header-title">
+        <div class="logo-badge">📶</div>
+        <h1>Configurar Wi-Fi</h1>
+      </div>
+    </header>
+
+    <main>
+      <div class="card">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">Conectar à sua Rede Wi-Fi</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+          Selecione a sua rede Wi-Fi abaixo e digite a senha para conectar o ESP8266.
+        </p>
+
+        <form id="form-wifi">
+          <div class="form-group">
+            <label class="form-label" for="wifi-ssid">Redes Disponíveis</label>
+            <select id="wifi-ssid" class="form-select" required>
+              <option value="">Procurando redes Wi-Fi...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="wifi-pass">Senha do Wi-Fi</label>
+            <input type="password" id="wifi-pass" class="form-input" placeholder="Digite a senha do Wi-Fi">
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="btn-save-wifi">Salvar e Conectar</button>
+        </form>
+      </div>
+    </main>
+
+    <footer class="footer">Área27 Sinuca &bull; Captive Portal Edition</footer>
+  </div>
+
+  <script>
+    async function scanWifi() {
+      const select = document.getElementById('wifi-ssid');
+      try {
+        const res = await fetch('/wifi/scan');
+        const networks = await res.json();
+        select.innerHTML = '<option value="">Selecione uma rede...</option>';
+        networks.forEach(net => {
+          const opt = document.createElement('option');
+          opt.value = net.ssid;
+          opt.textContent = `${net.ssid} (${net.rssi} dBm)`;
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        select.innerHTML = '<option value="">Erro ao buscar redes. Recarregue a página.</option>';
+      }
+    }
+
+    document.getElementById('form-wifi').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ssid = document.getElementById('wifi-ssid').value;
+      const pass = document.getElementById('wifi-pass').value;
+      const btn = document.getElementById('btn-save-wifi');
+
+      if (!ssid) { alert('Selecione uma rede Wi-Fi'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Salvando e Reiniciando...';
+
+      try {
+        await fetch('/wifi/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid, password: pass })
+        });
+        alert('Configuração salva! O ESP8266 está reiniciando para conectar à rede: ' + ssid);
+      } catch (e) {
+        alert('Configuração enviada! O ESP8266 irá reiniciar.');
+      }
+    });
+
+    scanWifi();
+  </script>
 </body>
 </html>
 )rawliteral";

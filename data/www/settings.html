@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Configurações - Área27 Sinuca</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <header class="header">
+      <div class="header-title">
+        <div class="logo-badge">⚙️</div>
+        <h1>Configurações</h1>
+      </div>
+      <a href="index.html" class="back-btn">← Voltar</a>
+    </header>
+
+    <main>
+      <!-- Config 1: Wi-Fi -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">📶 Rede Wi-Fi</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+          Reinicia o ESP8266 no modo Ponto de Acesso (Area27-Sinuca-Config) para conectar a outro roteador.
+        </p>
+        <button id="btn-reset-wifi" class="btn btn-secondary">Trocar de Rede Wi-Fi</button>
+      </div>
+
+      <!-- Config 2: Zerar Ranking -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🏆 Zerar Ranking</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+          Reseta todas as estatísticas (vitórias, derrotas e ELO para 1000), mantendo o cadastro dos jogadores.
+        </p>
+        <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
+      </div>
+
+      <!-- Config 3: Excluir Jogadores -->
+      <div class="card" style="margin-bottom: 16px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Gerenciar Jogadores</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+          Apaga permanentemente todos os jogadores cadastrados e reinicia o banco de dados.
+        </p>
+        <button id="btn-clear-players" class="btn btn-danger">Excluir Todos os Jogadores</button>
+      </div>
+    </main>
+
+    <footer class="footer">
+      Área27 Sinuca &bull; ESP8266 Edition
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

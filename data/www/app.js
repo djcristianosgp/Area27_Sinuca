@@ -32,8 +32,21 @@ const API = {
     });
   },
 
+  deletePlayer(id) {
+    return this.request('/players/delete', {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    });
+  },
+
   clearPlayers() {
     return this.request('/players/clear', {
+      method: 'POST'
+    });
+  },
+
+  resetRanking() {
+    return this.request('/ranking/reset', {
       method: 'POST'
     });
   },
@@ -46,6 +59,12 @@ const API = {
     return this.request('/match', {
       method: 'POST',
       body: JSON.stringify(data)
+    });
+  },
+
+  resetWifi() {
+    return this.request('/wifi/reset', {
+      method: 'POST'
     });
   }
 };
@@ -92,9 +111,12 @@ async function initPlayersPage() {
             <span class="player-name">${escapeHtml(p.nome)}</span>
             <span class="player-phone">${escapeHtml(p.telefone || '-')}</span>
           </div>
-          <div class="player-stats">
-            <span class="badge-elo">${p.elo || 1000} ELO</span>
-            <div class="record">${p.vitorias || 0}V / ${p.derrotas || 0}D</div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="player-stats">
+              <span class="badge-elo">${p.elo || 1000} ELO</span>
+              <div class="record">${p.vitorias || 0}V / ${p.derrotas || 0}D</div>
+            </div>
+            <button onclick="handleDeleteSinglePlayer(${p.id}, '${escapeHtml(p.nome)}')" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;" title="Excluir Jogador">🗑️</button>
           </div>
         </div>
       `).join('');
@@ -102,6 +124,16 @@ async function initPlayersPage() {
       playerList.innerHTML = `<div class="empty-state">Erro ao carregar lista de jogadores.</div>`;
     }
   }
+
+  window.handleDeleteSinglePlayer = async (id, nome) => {
+    if (confirm(`Deseja realmente excluir o jogador "${nome}"?`)) {
+      try {
+        await API.deletePlayer(id);
+        showToast(`Jogador "${nome}" excluído com sucesso!`, 'success');
+        await loadPlayers();
+      } catch (e) {}
+    }
+  };
 
   if (form) {
     form.addEventListener('submit', async (e) => {
@@ -220,7 +252,6 @@ async function initMatchPage() {
     }
   }
 
-  // Quick player registration form inside match page
   if (formQuickPlayer) {
     formQuickPlayer.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -246,7 +277,6 @@ async function initMatchPage() {
 
         await loadPlayersDropdown();
 
-        // Auto-select newly created player in Jogador B if Jogador A is selected, or in Jogador A
         if (res && res.id) {
           if (!selectA.value) {
             selectA.value = res.id;
@@ -362,6 +392,48 @@ async function initRankingPage() {
 }
 
 /**
+ * Page: Settings (settings.html)
+ */
+function initSettingsPage() {
+  const resetWifiBtn = document.getElementById('btn-reset-wifi');
+  const resetRankingBtn = document.getElementById('btn-reset-ranking');
+  const clearPlayersBtn = document.getElementById('btn-clear-players');
+
+  if (resetWifiBtn) {
+    resetWifiBtn.addEventListener('click', async () => {
+      if (confirm('Deseja realmente resetar a rede Wi-Fi? O ESP8266 reiniciará no modo Ponto de Acesso (Area27-Sinuca-Config).')) {
+        try {
+          await API.resetWifi();
+          showToast('Wi-Fi resetado! Reiniciando no modo AP...', 'success');
+        } catch (e) {}
+      }
+    });
+  }
+
+  if (resetRankingBtn) {
+    resetRankingBtn.addEventListener('click', async () => {
+      if (confirm('Deseja realmente zerar todas as estatísticas do ranking? (Os jogadores cadastrados serão mantidos)')) {
+        try {
+          await API.resetRanking();
+          showToast('Estatísticas do ranking zeradas!', 'success');
+        } catch (e) {}
+      }
+    });
+  }
+
+  if (clearPlayersBtn) {
+    clearPlayersBtn.addEventListener('click', async () => {
+      if (confirm('ATENÇÃO: Deseja realmente EXCLUIR TODOS OS JOGADORES? Esta ação não pode ser desfeita.')) {
+        try {
+          await API.clearPlayers();
+          showToast('Todos os jogadores foram excluídos com sucesso!', 'success');
+        } catch (e) {}
+      }
+    });
+  }
+}
+
+/**
  * Helper: XSS Prevention
  */
 function escapeHtml(str) {
@@ -378,4 +450,5 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('form-player')) initPlayersPage();
   if (document.getElementById('form-match') || document.getElementById('form-quick-player')) initMatchPage();
   if (document.getElementById('ranking-container')) initRankingPage();
+  if (document.getElementById('btn-reset-wifi') || document.getElementById('btn-clear-players')) initSettingsPage();
 });

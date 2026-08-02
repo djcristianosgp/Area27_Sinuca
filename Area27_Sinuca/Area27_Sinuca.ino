@@ -2,21 +2,27 @@
  * Área27 Sinuca - ESP8266 Firmware & Embedded Web Interface
  * 
  * Hardware: ESP8266 (ESP-01 / NodeMCU / Wemos D1 Mini)
+ * Features: Automatic Wi-Fi Captive Portal (AP Mode: Area27-Sinuca-Config)
  * Embedded Files: PROGMEM (Flash Storage) + LittleFS (Data Persistence)
  * Baud Rate: 115200
  */
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <DNSServer.h>
 #include <LittleFS.h>
 #include "WebPages.h"
 
-// Wi-Fi Credentials
-const char* WIFI_SSID     = "Area 27 House";
-const char* WIFI_PASSWORD = "Dj20Cris@23";
+// DNS Server for Captive Portal
+DNSServer dnsServer;
+const byte DNS_PORT = 53;
 
 // Web Server on Port 80
 ESP8266WebServer server(80);
+
+bool isAPMode = false;
+String wifiSSID = "";
+String wifiPassword = "";
 
 // In-Memory Player Structure
 struct Player {
@@ -32,6 +38,51 @@ struct Player {
 Player players[MAX_PLAYERS];
 int playerCount = 0;
 int nextPlayerId = 1;
+
+// Load Wi-Fi Config from LittleFS (/wifi_config.json)
+bool loadWifiConfig() {
+  if (!LittleFS.exists("/wifi_config.json")) {
+    Serial.println("[WIFI] Nenhum Wi-Fi salvo. Entrando em Modo Configuracao (AP).");
+    wifiSSID = "";
+    wifiPassword = "";
+    return false;
+  }
+
+  File file = LittleFS.open("/wifi_config.json", "r");
+  if (!file) return false;
+
+  String content = file.readString();
+  file.close();
+
+  int ssidPos = content.indexOf("\"ssid\":\"");
+  if (ssidPos != -1) {
+    int start = ssidPos + 8;
+    int end = content.indexOf("\"", start);
+    wifiSSID = content.substring(start, end);
+  }
+
+  int passPos = content.indexOf("\"password\":\"");
+  if (passPos != -1) {
+    int start = passPos + 12;
+    int end = content.indexOf("\"", start);
+    wifiPassword = content.substring(start, end);
+  }
+
+  return (wifiSSID.length() > 0);
+}
+
+// Save Wi-Fi Config to LittleFS (/wifi_config.json)
+void saveWifiConfig(String ssid, String password) {
+  File file = LittleFS.open("/wifi_config.json", "w");
+  if (!file) return;
+
+  file.print("{\n");
+  file.print("  \"ssid\": \"" + ssid + "\",\n");
+  file.print("  \"password\": \"" + password + "\"\n");
+  file.print("}\n");
+  file.close();
+  Serial.println("[WIFI] Novas configuracoes salvas no LittleFS.");
+}
 
 // Save Players state to LittleFS (/players.json)
 void savePlayersToFile() {
@@ -74,6 +125,14 @@ void loadPlayersFromFile() {
 
   String content = file.readString();
   file.close();
+
+  if (content.indexOf("Jogador 1") != -1 || content.indexOf("Jogador 2") != -1) {
+    Serial.println("[STORAGE] Jogadores dummy detectados. Purgando dados antigos...");
+    playerCount = 0;
+    nextPlayerId = 1;
+    savePlayersToFile();
+    return;
+  }
 
   playerCount = 0;
   int searchPos = 0;
@@ -141,6 +200,15 @@ bool handleFileRead(String path) {
   Serial.print("[HTTP] Serve: ");
   Serial.println(path);
 
+  if (isAPMode) {
+    if (path == "/style.css") {
+      server.send_P(200, "text/css", CSS_STYLE);
+      return true;
+    }
+    server.send_P(200, "text/html", HTML_WIFI_CONFIG);
+    return true;
+  }
+
   if (path == "/index.html") {
     server.send_P(200, "text/html", HTML_INDEX);
     return true;
@@ -157,8 +225,16 @@ bool handleFileRead(String path) {
     server.send_P(200, "text/html", HTML_RANKING);
     return true;
   }
+  if (path == "/settings.html") {
+    server.send_P(200, "text/html", HTML_SETTINGS);
+    return true;
+  }
   if (path == "/about.html") {
     server.send_P(200, "text/html", HTML_ABOUT);
+    return true;
+  }
+  if (path == "/wifi.html") {
+    server.send_P(200, "text/html", HTML_WIFI_CONFIG);
     return true;
   }
   if (path == "/style.css") {
@@ -171,6 +247,58 @@ bool handleFileRead(String path) {
   }
 
   return false;
+}
+
+// API: GET /wifi/scan
+void handleWifiScan() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  int n = WiFi.scanNetworks();
+  String json = "[";
+  for (int i = 0; i < n; ++i) {
+    if (i > 0) json += ",";
+    json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
+// API: POST /wifi/save
+void handleWifiSave() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Dados ausentes\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+
+  int ssidPos = body.indexOf("\"ssid\":\"");
+  if (ssidPos == -1) ssidPos = body.indexOf("\"ssid\": \"");
+  int ssidStart = body.indexOf("\"", ssidPos + 6) + 1;
+  int ssidEnd = body.indexOf("\"", ssidStart);
+  String newSSID = body.substring(ssidStart, ssidEnd);
+
+  int passPos = body.indexOf("\"password\":\"");
+  if (passPos == -1) passPos = body.indexOf("\"password\": \"");
+  int passStart = body.indexOf("\"", passPos + 10) + 1;
+  int passEnd = body.indexOf("\"", passStart);
+  String newPass = body.substring(passStart, passEnd);
+
+  saveWifiConfig(newSSID, newPass);
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Wi-Fi salvo. Reiniciando...\"}");
+  delay(1000);
+  ESP.restart();
+}
+
+// API: POST /wifi/reset
+void handleWifiReset() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (LittleFS.exists("/wifi_config.json")) {
+    LittleFS.remove("/wifi_config.json");
+  }
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Wi-Fi resetado. Reiniciando...\"}");
+  delay(1000);
+  ESP.restart();
 }
 
 // API: GET /players
@@ -219,13 +347,61 @@ void handlePostPlayers() {
   }
 }
 
-// API: POST /players/clear (Limpar Lista de Jogadores)
+// API: POST /players/delete
+void handleDeletePlayer() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+  int idPos = body.indexOf("\"id\":");
+  if (idPos == -1) {
+    server.send(400, "application/json", "{\"error\":\"ID ausente\"}");
+    return;
+  }
+  int targetId = body.substring(idPos + 5).toInt();
+
+  int targetIndex = -1;
+  for (int i = 0; i < playerCount; i++) {
+    if (players[i].id == targetId) {
+      targetIndex = i;
+      break;
+    }
+  }
+
+  if (targetIndex != -1) {
+    for (int i = targetIndex; i < playerCount - 1; i++) {
+      players[i] = players[i + 1];
+    }
+    playerCount--;
+    savePlayersToFile();
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Jogador excluido\"}");
+  } else {
+    server.send(404, "application/json", "{\"error\":\"Jogador nao encontrado\"}");
+  }
+}
+
+// API: POST /players/clear
 void handleClearPlayers() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   playerCount = 0;
   nextPlayerId = 1;
   savePlayersToFile();
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Jogadores limpos\"}");
+}
+
+// API: POST /ranking/reset
+void handleResetRanking() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  for (int i = 0; i < playerCount; i++) {
+    players[i].elo = 1000;
+    players[i].vitorias = 0;
+    players[i].derrotas = 0;
+  }
+  savePlayersToFile();
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Ranking zerado com sucesso\"}");
 }
 
 // API: GET /ranking
@@ -288,6 +464,24 @@ void handlePostMatch() {
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida registrada com sucesso.\"}");
 }
 
+void startAPMode() {
+  isAPMode = true;
+  WiFi.mode(WIFI_AP);
+  IPAddress apIP(192, 168, 4, 1);
+  IPAddress netMsk(255, 255, 255, 0);
+  WiFi.softAPConfig(apIP, apIP, netMsk);
+  WiFi.softAP("Area27-Sinuca-Config");
+
+  dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+  dnsServer.start(DNS_PORT, "*", apIP);
+
+  Serial.println("\n\n==================================================");
+  Serial.println("  📶 MODO PONTO DE ACESSO (AP) ATIVADO!");
+  Serial.println("  1. Conecte no Wi-Fi: 'Area27-Sinuca-Config'");
+  Serial.println("  2. Acesse no navegador: http://192.168.4.1/");
+  Serial.println("==================================================\n");
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -295,50 +489,61 @@ void setup() {
   Serial.println("         ÁREA27 SINUCA - ESP8266 SERVER           ");
   Serial.println("==================================================");
 
-  // Mount LittleFS for data persistence
   if (!LittleFS.begin()) {
-    Serial.println("[LITTLEFS] ✗ Erro ao inicializar LittleFS. Formatando...");
+    Serial.println("[LITTLEFS] ✗ Formatando LittleFS...");
     LittleFS.format();
     LittleFS.begin();
   }
   
-  // Clean dummy files if present
   loadPlayersFromFile();
+  bool hasSavedWifi = loadWifiConfig();
 
-  // Connect to Wi-Fi
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("[WIFI] Conectando a '");
-  Serial.print(WIFI_SSID);
-  Serial.print("' ");
+  if (hasSavedWifi) {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
+    Serial.print("[WIFI] Conectando a '");
+    Serial.print(wifiSSID);
+    Serial.print("' ");
 
-  int timeout = 0;
-  while (WiFi.status() != WL_CONNECTED && timeout < 40) {
-    delay(500);
-    Serial.print(".");
-    timeout++;
-  }
+    int timeout = 0;
+    while (WiFi.status() != WL_CONNECTED && timeout < 25) {
+      delay(500);
+      Serial.print(".");
+      timeout++;
+    }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n\n==================================================");
-    Serial.println("  ✓ CONECTADO COM SUCESSO AO WI-FI!");
-    Serial.print(  "  ➜ ENDEREÇO IP DO ESP: http://");
-    Serial.println(WiFi.localIP());
-    Serial.println("==================================================\n");
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\n\n==================================================");
+      Serial.println("  ✓ CONECTADO COM SUCESSO AO WI-FI!");
+      Serial.print(  "  ➜ ENDEREÇO IP DO ESP: http://");
+      Serial.println(WiFi.localIP());
+      Serial.println("==================================================\n");
+    } else {
+      Serial.println("\n\n[WIFI] ✗ Falha ao conectar no Wi-Fi salvo. Iniciando Modo AP...");
+      startAPMode();
+    }
   } else {
-    Serial.println("\n\n[WIFI] ✗ Falha ao conectar. Verifique o SSID e a Senha.");
+    Serial.println("[WIFI] Nenhum Wi-Fi configurado. Iniciando Modo AP...");
+    startAPMode();
   }
 
   // Setup REST API Routes
   server.on("/players",       HTTP_GET,  handleGetPlayers);
   server.on("/players",       HTTP_POST, handlePostPlayers);
+  server.on("/players/delete",HTTP_POST, handleDeletePlayer);
   server.on("/players/clear", HTTP_POST, handleClearPlayers);
   server.on("/ranking",       HTTP_GET,  handleGetRanking);
+  server.on("/ranking/reset", HTTP_POST, handleResetRanking);
   server.on("/match",         HTTP_POST, handlePostMatch);
+  server.on("/wifi/scan",     HTTP_GET,  handleWifiScan);
+  server.on("/wifi/save",     HTTP_POST, handleWifiSave);
+  server.on("/wifi/reset",    HTTP_POST, handleWifiReset);
 
-  // Catch-all: Static Embedded Web Server
+  // Captive Portal Redirect / Static Web Server
   server.onNotFound([]() {
-    if (!handleFileRead(server.uri())) {
+    if (isAPMode) {
+      server.send_P(200, "text/html", HTML_WIFI_CONFIG);
+    } else if (!handleFileRead(server.uri())) {
       server.send(404, "text/plain", "404: Arquivo nao encontrado");
     }
   });
@@ -350,9 +555,13 @@ void setup() {
 unsigned long lastIpPrint = 0;
 
 void loop() {
+  if (isAPMode) {
+    dnsServer.processNextRequest();
+  }
+
   server.handleClient();
 
-  if (millis() - lastIpPrint > 20000) {
+  if (!isAPMode && millis() - lastIpPrint > 20000) {
     lastIpPrint = millis();
     if (WiFi.status() == WL_CONNECTED) {
       Serial.print("➜ ESP8266 ONLINE | Acesse no navegador: http://");

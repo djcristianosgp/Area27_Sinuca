@@ -54,19 +54,25 @@ bool loadWifiConfig() {
   String content = file.readString();
   file.close();
 
-  int ssidPos = content.indexOf("\"ssid\":\"");
+  int ssidPos = content.indexOf("\"ssid\"");
   if (ssidPos != -1) {
-    int start = ssidPos + 8;
+    int colonPos = content.indexOf(":", ssidPos);
+    int start = content.indexOf("\"", colonPos) + 1;
     int end = content.indexOf("\"", start);
     wifiSSID = content.substring(start, end);
   }
 
-  int passPos = content.indexOf("\"password\":\"");
+  int passPos = content.indexOf("\"password\"");
   if (passPos != -1) {
-    int start = passPos + 12;
+    int colonPos = content.indexOf(":", passPos);
+    int start = content.indexOf("\"", colonPos) + 1;
     int end = content.indexOf("\"", start);
     wifiPassword = content.substring(start, end);
   }
+
+  Serial.print("[WIFI] Rede salva no LittleFS: '");
+  Serial.print(wifiSSID);
+  Serial.println("'");
 
   return (wifiSSID.length() > 0);
 }
@@ -262,32 +268,76 @@ void handleWifiScan() {
   server.send(200, "application/json", json);
 }
 
-// API: POST /wifi/save
+// API: POST /wifi/save (Handles both HTML Form POST and JSON POST)
 void handleWifiSave() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Dados ausentes\"}");
-    return;
+  
+  String newSSID = "";
+  String newPass = "";
+
+  if (server.hasArg("ssid")) {
+    newSSID = server.arg("ssid");
+  }
+  if (server.hasArg("password")) {
+    newPass = server.arg("password");
   }
 
-  String body = server.arg("plain");
+  if (newSSID.length() == 0 && server.hasArg("plain")) {
+    String body = server.arg("plain");
+    int ssidPos = body.indexOf("\"ssid\"");
+    if (ssidPos != -1) {
+      int colonPos = body.indexOf(":", ssidPos);
+      int start = body.indexOf("\"", colonPos) + 1;
+      int end = body.indexOf("\"", start);
+      newSSID = body.substring(start, end);
+    }
+    int passPos = body.indexOf("\"password\"");
+    if (passPos != -1) {
+      int colonPos = body.indexOf(":", passPos);
+      int start = body.indexOf("\"", colonPos) + 1;
+      int end = body.indexOf("\"", start);
+      newPass = body.substring(start, end);
+    }
+  }
 
-  int ssidPos = body.indexOf("\"ssid\":\"");
-  if (ssidPos == -1) ssidPos = body.indexOf("\"ssid\": \"");
-  int ssidStart = body.indexOf("\"", ssidPos + 6) + 1;
-  int ssidEnd = body.indexOf("\"", ssidStart);
-  String newSSID = body.substring(ssidStart, ssidEnd);
+  if (newSSID.length() > 0) {
+    Serial.print("[WIFI] Salvando nova rede: '");
+    Serial.print(newSSID);
+    Serial.println("'");
+    saveWifiConfig(newSSID, newPass);
 
-  int passPos = body.indexOf("\"password\":\"");
-  if (passPos == -1) passPos = body.indexOf("\"password\": \"");
-  int passStart = body.indexOf("\"", passPos + 10) + 1;
-  int passEnd = body.indexOf("\"", passStart);
-  String newPass = body.substring(passStart, passEnd);
+    String htmlResponse = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wi-Fi Salvo</title>
+  <style>
+    body { background: #121212; color: #ffffff; font-family: -apple-system, sans-serif; text-align: center; padding: 40px 20px; }
+    .card { max-width: 400px; margin: 0 auto; background: #1E1E1E; padding: 30px; border-radius: 12px; border: 1px solid #2A2A2A; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    .icon { font-size: 3rem; margin-bottom: 12px; }
+    h2 { color: #3B93C1; margin-bottom: 10px; }
+    p { color: #BBBBBB; font-size: 0.95rem; line-height: 1.5; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h2>Configuração Salva!</h2>
+    <p>O ESP8266 está reiniciando para se conectar à rede Wi-Fi <strong>)rawliteral" + newSSID + R"rawliteral(</strong>.</p>
+    <p>Reconecte o seu celular na sua rede de casa para usar o sistema.</p>
+  </div>
+</body>
+</html>
+)rawliteral";
 
-  saveWifiConfig(newSSID, newPass);
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Wi-Fi salvo. Reiniciando...\"}");
-  delay(1000);
-  ESP.restart();
+    server.send(200, "text/html", htmlResponse);
+    delay(1500);
+    ESP.restart();
+  } else {
+    server.send(400, "text/html", "<h2>Erro: Nome da rede Wi-Fi nao informado.</h2>");
+  }
 }
 
 // API: POST /wifi/reset

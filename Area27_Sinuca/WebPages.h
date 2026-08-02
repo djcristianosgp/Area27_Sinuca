@@ -893,20 +893,20 @@ const char HTML_WIFI_CONFIG[] PROGMEM = R"rawliteral(
           Selecione a sua rede Wi-Fi abaixo e digite a senha para conectar o ESP8266.
         </p>
 
-        <form id="form-wifi">
+        <form action="/wifi/save" method="POST">
           <div class="form-group">
             <label class="form-label" for="wifi-ssid">Redes Disponíveis</label>
-            <select id="wifi-ssid" class="form-select" required>
+            <select id="wifi-ssid" name="ssid" class="form-select" required>
               <option value="">Procurando redes Wi-Fi...</option>
             </select>
           </div>
 
           <div class="form-group">
             <label class="form-label" for="wifi-pass">Senha do Wi-Fi</label>
-            <input type="password" id="wifi-pass" class="form-input" placeholder="Digite a senha do Wi-Fi">
+            <input type="password" id="wifi-pass" name="password" class="form-input" placeholder="Digite a senha do Wi-Fi">
           </div>
 
-          <button type="submit" class="btn btn-primary" id="btn-save-wifi">Salvar e Conectar</button>
+          <button type="submit" class="btn btn-primary">Salvar e Conectar</button>
         </form>
       </div>
     </main>
@@ -928,33 +928,9 @@ const char HTML_WIFI_CONFIG[] PROGMEM = R"rawliteral(
           select.appendChild(opt);
         });
       } catch (e) {
-        select.innerHTML = '<option value="">Erro ao buscar redes. Recarregue a página.</option>';
+        select.innerHTML = '<option value="">Erro ao buscar redes. Digite manualmente ou recarregue.</option>';
       }
     }
-
-    document.getElementById('form-wifi').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const ssid = document.getElementById('wifi-ssid').value;
-      const pass = document.getElementById('wifi-pass').value;
-      const btn = document.getElementById('btn-save-wifi');
-
-      if (!ssid) { alert('Selecione uma rede Wi-Fi'); return; }
-
-      btn.disabled = true;
-      btn.textContent = 'Salvando e Reiniciando...';
-
-      try {
-        await fetch('/wifi/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ssid, password: pass })
-        });
-        alert('Configuração salva! O ESP8266 está reiniciando para conectar à rede: ' + ssid);
-      } catch (e) {
-        alert('Configuração enviada! O ESP8266 irá reiniciar.');
-      }
-    });
-
     scanWifi();
   </script>
 </body>

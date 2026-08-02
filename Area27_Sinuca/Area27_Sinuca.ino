@@ -1,14 +1,15 @@
 /*
- * Área27 Sinuca - ESP8266 Firmware & REST API Server
+ * Área27 Sinuca - ESP8266 Firmware & Embedded Web Interface
  * 
  * Hardware: ESP8266 (ESP-01 / NodeMCU / Wemos D1 Mini)
- * File System: LittleFS (/data/www/)
+ * Embedded Files: PROGMEM (Flash Storage) + LittleFS (Data Persistence)
  * Baud Rate: 115200
  */
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <LittleFS.h>
+#include "WebPages.h"
 
 // Wi-Fi Credentials
 const char* WIFI_SSID     = "Area 27 House";
@@ -27,26 +28,16 @@ struct Player {
   int derrotas;
 };
 
-#define MAX_PLAYERS 30
+#define MAX_PLAYERS 50
 Player players[MAX_PLAYERS];
 int playerCount = 0;
 int nextPlayerId = 1;
-
-// Helper: Content-Type MIME determination
-String getContentType(String filename) {
-  if (filename.endsWith(".html")) return "text/html";
-  if (filename.endsWith(".css"))  return "text/css";
-  if (filename.endsWith(".js"))   return "application/javascript";
-  if (filename.endsWith(".ico"))  return "image/x-icon";
-  if (filename.endsWith(".json")) return "application/json";
-  return "text/plain";
-}
 
 // Save Players state to LittleFS (/players.json)
 void savePlayersToFile() {
   File file = LittleFS.open("/players.json", "w");
   if (!file) {
-    Serial.println("Erro ao abrir /players.json para escrita");
+    Serial.println("[STORAGE] ✗ Erro ao abrir /players.json");
     return;
   }
 
@@ -65,18 +56,15 @@ void savePlayersToFile() {
   }
   file.print("]\n");
   file.close();
-  Serial.println("Dados dos jogadores salvos no LittleFS.");
+  Serial.println("[STORAGE] ✓ Dados dos jogadores salvos.");
 }
 
 // Load Players state from LittleFS (/players.json)
 void loadPlayersFromFile() {
   if (!LittleFS.exists("/players.json")) {
-    Serial.println("Nenhum arquivo /players.json encontrado. Inicializando lista vazia.");
-    // Exemplo de dados iniciais (se desejar)
-    players[0] = {1, "Jogador 1", "27999999999", 1000, 0, 0};
-    players[1] = {2, "Jogador 2", "27888888888", 1000, 0, 0};
-    playerCount = 2;
-    nextPlayerId = 3;
+    Serial.println("[STORAGE] Criando /players.json vazio...");
+    playerCount = 0;
+    nextPlayerId = 1;
     savePlayersToFile();
     return;
   }
@@ -87,7 +75,6 @@ void loadPlayersFromFile() {
   String content = file.readString();
   file.close();
 
-  // Simple JSON Parser to avoid external memory-heavy libraries on ESP8266
   playerCount = 0;
   int searchPos = 0;
   while (playerCount < MAX_PLAYERS) {
@@ -125,7 +112,7 @@ void loadPlayersFromFile() {
     searchPos = derEnd;
   }
 
-  Serial.printf("Carregados %d jogadores do LittleFS.\n", playerCount);
+  Serial.printf("[STORAGE] Carregados %d jogadores.\n", playerCount);
 }
 
 // Convert Players Array to JSON String
@@ -147,36 +134,39 @@ String getPlayersJSON() {
   return json;
 }
 
-// Serve Static Files from LittleFS (/www/ or /)
+// Serve Static Pages directly from Flash (PROGMEM)
 bool handleFileRead(String path) {
   if (path.endsWith("/")) path += "index.html";
 
-  // Check if file exists in /www/ or root
-  String pathWithGz = "/www" + path + ".gz";
-  String pathWww    = "/www" + path;
+  Serial.print("[HTTP] Serve: ");
+  Serial.println(path);
 
-  if (LittleFS.exists(pathWithGz)) {
-    File file = LittleFS.open(pathWithGz, "r");
-    server.sendHeader("Content-Encoding", "gzip");
-    server.sendHeader("Cache-Control", "max-age=86400");
-    server.streamFile(file, getContentType(path));
-    file.close();
+  if (path == "/index.html") {
+    server.send_P(200, "text/html", HTML_INDEX);
     return true;
   }
-
-  if (LittleFS.exists(pathWww)) {
-    File file = LittleFS.open(pathWww, "r");
-    server.sendHeader("Cache-Control", "max-age=86400");
-    server.streamFile(file, getContentType(path));
-    file.close();
+  if (path == "/players.html") {
+    server.send_P(200, "text/html", HTML_PLAYERS);
     return true;
   }
-
-  if (LittleFS.exists(path)) {
-    File file = LittleFS.open(path, "r");
-    server.sendHeader("Cache-Control", "max-age=86400");
-    server.streamFile(file, getContentType(path));
-    file.close();
+  if (path == "/match.html") {
+    server.send_P(200, "text/html", HTML_MATCH);
+    return true;
+  }
+  if (path == "/ranking.html") {
+    server.send_P(200, "text/html", HTML_RANKING);
+    return true;
+  }
+  if (path == "/about.html") {
+    server.send_P(200, "text/html", HTML_ABOUT);
+    return true;
+  }
+  if (path == "/style.css") {
+    server.send_P(200, "text/css", CSS_STYLE);
+    return true;
+  }
+  if (path == "/app.js") {
+    server.send_P(200, "application/javascript", JS_APP);
     return true;
   }
 
@@ -227,6 +217,15 @@ void handlePostPlayers() {
   } else {
     server.send(400, "application/json", "{\"error\":\"Limite de jogadores atingido\"}");
   }
+}
+
+// API: POST /players/clear (Limpar Lista de Jogadores)
+void handleClearPlayers() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  playerCount = 0;
+  nextPlayerId = 1;
+  savePlayersToFile();
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Jogadores limpos\"}");
 }
 
 // API: GET /ranking
@@ -291,22 +290,27 @@ void handlePostMatch() {
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
-  Serial.println("\n--- Área27 Sinuca ESP8266 Server ---");
+  delay(1000);
+  Serial.println("\n\n==================================================");
+  Serial.println("         ÁREA27 SINUCA - ESP8266 SERVER           ");
+  Serial.println("==================================================");
 
-  // Mount LittleFS
+  // Mount LittleFS for data persistence
   if (!LittleFS.begin()) {
-    Serial.println("Erro ao inicializar o LittleFS!");
-  } else {
-    Serial.println("LittleFS inicializado com sucesso.");
-    loadPlayersFromFile();
+    Serial.println("[LITTLEFS] ✗ Erro ao inicializar LittleFS. Formatando...");
+    LittleFS.format();
+    LittleFS.begin();
   }
+  
+  // Clean dummy files if present
+  loadPlayersFromFile();
 
   // Connect to Wi-Fi
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Conectando ao Wi-Fi: ");
-  Serial.println(WIFI_SSID);
+  Serial.print("[WIFI] Conectando a '");
+  Serial.print(WIFI_SSID);
+  Serial.print("' ");
 
   int timeout = 0;
   while (WiFi.status() != WL_CONNECTED && timeout < 40) {
@@ -316,20 +320,23 @@ void setup() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✓ Conectado com sucesso!");
-    Serial.print("Endereço IP no Wi-Fi: ");
+    Serial.println("\n\n==================================================");
+    Serial.println("  ✓ CONECTADO COM SUCESSO AO WI-FI!");
+    Serial.print(  "  ➜ ENDEREÇO IP DO ESP: http://");
     Serial.println(WiFi.localIP());
+    Serial.println("==================================================\n");
   } else {
-    Serial.println("\n✗ Falha ao conectar no Wi-Fi. Verifique o SSID e a Senha.");
+    Serial.println("\n\n[WIFI] ✗ Falha ao conectar. Verifique o SSID e a Senha.");
   }
 
   // Setup REST API Routes
-  server.on("/players", HTTP_GET, handleGetPlayers);
-  server.on("/players", HTTP_POST, handlePostPlayers);
-  server.on("/ranking", HTTP_GET, handleGetRanking);
-  server.on("/match",   HTTP_POST, handlePostMatch);
+  server.on("/players",       HTTP_GET,  handleGetPlayers);
+  server.on("/players",       HTTP_POST, handlePostPlayers);
+  server.on("/players/clear", HTTP_POST, handleClearPlayers);
+  server.on("/ranking",       HTTP_GET,  handleGetRanking);
+  server.on("/match",         HTTP_POST, handlePostMatch);
 
-  // Catch-all: Static Web Server
+  // Catch-all: Static Embedded Web Server
   server.onNotFound([]() {
     if (!handleFileRead(server.uri())) {
       server.send(404, "text/plain", "404: Arquivo nao encontrado");
@@ -337,9 +344,22 @@ void setup() {
   });
 
   server.begin();
-  Serial.println("Servidor HTTP iniciado na porta 80.");
+  Serial.println("[SERVER] Servidor HTTP embarcado ativo na porta 80.");
 }
+
+unsigned long lastIpPrint = 0;
 
 void loop() {
   server.handleClient();
+
+  if (millis() - lastIpPrint > 20000) {
+    lastIpPrint = millis();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.print("➜ ESP8266 ONLINE | Acesse no navegador: http://");
+      Serial.println(WiFi.localIP());
+    } else {
+      Serial.println("[WIFI] Reconectando à rede...");
+      WiFi.reconnect();
+    }
+  }
 }

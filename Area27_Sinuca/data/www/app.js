@@ -32,12 +32,6 @@ const API = {
     });
   },
 
-  clearPlayers() {
-    return this.request('/players/clear', {
-      method: 'POST'
-    });
-  },
-
   getRanking() {
     return this.request('/ranking');
   },
@@ -143,8 +137,7 @@ async function initPlayersPage() {
  * Page: Nova Partida (match.html)
  */
 async function initMatchPage() {
-  const formMatch = document.getElementById('form-match');
-  const formQuickPlayer = document.getElementById('form-quick-player');
+  const form = document.getElementById('form-match');
   const selectA = document.getElementById('playerA');
   const selectB = document.getElementById('playerB');
   const selectWinner = document.getElementById('winner');
@@ -189,78 +182,25 @@ async function initMatchPage() {
 
   async function loadPlayersDropdown() {
     try {
-      const valA = selectA ? selectA.value : '';
-      const valB = selectB ? selectB.value : '';
-
       playersCache = await API.getPlayers();
 
-      if (selectA && selectB) {
-        selectA.innerHTML = '<option value="">Selecione o Jogador A</option>';
-        selectB.innerHTML = '<option value="">Selecione o Jogador B</option>';
+      selectA.innerHTML = '<option value="">Selecione o Jogador A</option>';
+      selectB.innerHTML = '<option value="">Selecione o Jogador B</option>';
 
-        playersCache.forEach(p => {
-          const opt1 = document.createElement('option');
-          opt1.value = p.id;
-          opt1.textContent = p.nome;
-          selectA.appendChild(opt1);
+      playersCache.forEach(p => {
+        const opt1 = document.createElement('option');
+        opt1.value = p.id;
+        opt1.textContent = p.nome;
+        selectA.appendChild(opt1);
 
-          const opt2 = document.createElement('option');
-          opt2.value = p.id;
-          opt2.textContent = p.nome;
-          selectB.appendChild(opt2);
-        });
-
-        if (valA) selectA.value = valA;
-        if (valB) selectB.value = valB;
-
-        updateWinnerOptions();
-      }
+        const opt2 = document.createElement('option');
+        opt2.value = p.id;
+        opt2.textContent = p.nome;
+        selectB.appendChild(opt2);
+      });
     } catch (err) {
       showToast('Erro ao carregar lista de jogadores', 'error');
     }
-  }
-
-  // Quick player registration form inside match page
-  if (formQuickPlayer) {
-    formQuickPlayer.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const nomeInput = document.getElementById('quick-nome');
-      const telInput = document.getElementById('quick-telefone');
-
-      const nome = nomeInput.value.trim();
-      const telefone = telInput.value.trim();
-
-      if (!nome) {
-        showToast('Informe o nome do jogador', 'error');
-        return;
-      }
-
-      const submitBtn = formQuickPlayer.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-
-      try {
-        const res = await API.addPlayer({ nome, telefone });
-        showToast(`Jogador '${nome}' cadastrado com sucesso!`, 'success');
-        nomeInput.value = '';
-        telInput.value = '';
-
-        await loadPlayersDropdown();
-
-        // Auto-select newly created player in Jogador B if Jogador A is selected, or in Jogador A
-        if (res && res.id) {
-          if (!selectA.value) {
-            selectA.value = res.id;
-          } else if (!selectB.value && selectA.value != res.id) {
-            selectB.value = res.id;
-          }
-          updateWinnerOptions();
-        }
-      } catch (err) {
-        // Handled in API
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
   }
 
   if (selectA && selectB) {
@@ -268,8 +208,8 @@ async function initMatchPage() {
     selectB.addEventListener('change', updateWinnerOptions);
   }
 
-  if (formMatch) {
-    formMatch.addEventListener('submit', async (e) => {
+  if (form) {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const playerA = Number(selectA.value);
@@ -291,13 +231,13 @@ async function initMatchPage() {
         return;
       }
 
-      const submitBtn = formMatch.querySelector('button[type="submit"]');
+      const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
 
       try {
         await API.registerMatch({ playerA, playerB, winner });
         showToast('Partida registrada com sucesso.', 'success');
-        formMatch.reset();
+        form.reset();
         selectWinner.disabled = true;
       } catch (err) {
         // Handled in API
@@ -325,6 +265,7 @@ async function initRankingPage() {
       return;
     }
 
+    // Sort descending by ELO
     const sorted = [...list].sort((a, b) => (b.elo || 0) - (a.elo || 0));
 
     rankingContainer.innerHTML = sorted.map((p, idx) => {
@@ -374,8 +315,9 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// Global page initialization based on DOM elements
 document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('form-player')) initPlayersPage();
-  if (document.getElementById('form-match') || document.getElementById('form-quick-player')) initMatchPage();
+  if (document.getElementById('form-match')) initMatchPage();
   if (document.getElementById('ranking-container')) initRankingPage();
 });

@@ -19,7 +19,7 @@
 #include <LittleFS.h>
 #include "WebPages.h"
 
-const char* CURRENT_VERSION = "2.0.3";
+const char* CURRENT_VERSION = "2.0.4";
 const char* GITHUB_VERSION_URL = "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/version.json";
 
 // DNS Server for Captive Portal

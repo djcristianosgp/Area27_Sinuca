@@ -148,7 +148,501 @@ function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-document.addEventListener('DOMContentLoaded', () => { renderUserHeaderStatus(); });
+
+function selectUser(id, nome, elo) {
+  setCurrentUser({ id, nome, elo });
+  showToast(`Sessão iniciada como ${nome}!`, 'success');
+}
+
+async function initPlayersPage() {
+  const container = document.getElementById('players-container');
+  const form = document.getElementById('form-add-player');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nome = document.getElementById('new-player-name').value.trim();
+      const telefone = document.getElementById('new-player-phone').value.trim();
+      if (!nome) return;
+      try {
+        await API.registerPlayer({ nome, telefone });
+        showToast('Jogador cadastrado com sucesso!', 'success');
+        form.reset();
+        loadList();
+      } catch (err) {}
+    });
+  }
+  async function loadList() {
+    try {
+      const players = await API.getPlayers();
+      if (!players || players.length === 0) {
+        container.innerHTML = '<div class="empty-state">Nenhum jogador cadastrado ainda. Use o formulário acima para adicionar!</div>';
+        return;
+      }
+      container.innerHTML = players.map(p => `
+        <div class="list-item">
+          <div>
+            <a href="profile.html?id=${p.id}" style="color:inherit; text-decoration:none; font-weight:700;">👤 ${escapeHtml(p.nome)}</a>
+            <div style="font-size:0.8rem; color:var(--text-muted);">${p.vitorias || 0}V / ${p.derrotas || 0}D ${p.telefone ? '&bull; Tel: ' + escapeHtml(p.telefone) : ''}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="badge-elo">${p.elo || 1000} ELO</span>
+            <button onclick="selectUser(${p.id}, '${escapeHtml(p.nome)}', ${p.elo || 1000})" class="btn btn-secondary" style="height:34px; padding:0 10px; font-size:0.8rem;">Entrar</button>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      container.innerHTML = '<div class="empty-state">Erro ao carregar jogadores.</div>';
+    }
+  }
+  loadList();
+}
+
+async function initRankingPage() {
+  const container = document.getElementById('ranking-container');
+  try {
+    const players = await API.getRanking();
+    if (!players || players.length === 0) {
+      container.innerHTML = '<div class="empty-state">Nenhum jogador no ranking ainda.</div>';
+      return;
+    }
+    players.sort((a, b) => (b.elo || 1000) - (a.elo || 1000));
+    container.innerHTML = players.map((p, idx) => {
+      const rankClass = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
+      const rankBadge = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `${idx + 1}`));
+      const total = (p.vitorias || 0) + (p.derrotas || 0);
+      const winrate = total > 0 ? Math.round((p.vitorias / total) * 100) : 0;
+      return `
+        <div class="ranking-card" style="margin-bottom:10px;">
+          <div class="ranking-rank ${rankClass}">${rankBadge}</div>
+          <div style="flex:1;">
+            <a href="profile.html?id=${p.id}" style="color:inherit; text-decoration:none; font-weight:700; font-size:1.05rem;">${escapeHtml(p.nome)}</a>
+            <div style="font-size:0.8rem; color:var(--text-muted);">${p.vitorias || 0}V / ${p.derrotas || 0}D (${winrate}% vitórias)</div>
+          </div>
+          <div class="badge-elo" style="font-size:1rem; padding:6px 12px;">${p.elo || 1000} ELO</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Erro ao carregar ranking.</div>';
+  }
+}
+
+async function initHallPage() {
+  const peakEl = document.getElementById('hall-peak-elo');
+  const streakEl = document.getElementById('hall-max-streak');
+  try {
+    const players = await API.getPlayers();
+    if (!players || players.length === 0) {
+      if (peakEl) peakEl.textContent = 'Nenhum registro';
+      if (streakEl) streakEl.textContent = 'Nenhum registro';
+      return;
+    }
+    let topEloPlayer = players[0];
+    for (const p of players) {
+      const pPeak = p.peak_elo || p.elo || 1000;
+      const curTopPeak = topEloPlayer.peak_elo || topEloPlayer.elo || 1000;
+      if (pPeak > curTopPeak) topEloPlayer = p;
+    }
+    const maxEloVal = topEloPlayer.peak_elo || topEloPlayer.elo || 1000;
+    if (peakEl) peakEl.innerHTML = `👑 <strong>${escapeHtml(topEloPlayer.nome)}</strong> (${maxEloVal} ELO)`;
+
+    let topStreakPlayer = players[0];
+    for (const p of players) {
+      const pStreak = p.max_win_streak || p.current_streak || 0;
+      const curTopStreak = topStreakPlayer.max_win_streak || topStreakPlayer.current_streak || 0;
+      if (pStreak > curTopStreak) topStreakPlayer = p;
+    }
+    const maxStreakVal = topStreakPlayer.max_win_streak || topStreakPlayer.current_streak || 0;
+    if (streakEl) streakEl.innerHTML = `🔥 <strong>${escapeHtml(topStreakPlayer.nome)}</strong> (${maxStreakVal} vitórias seguidas)`;
+  } catch (err) {
+    if (peakEl) peakEl.textContent = 'Erro ao carregar';
+    if (streakEl) streakEl.textContent = 'Erro ao carregar';
+  }
+}
+
+async function initProfilePage() {
+  const params = new URLSearchParams(window.location.search);
+  let playerId = parseInt(params.get('id'));
+  if (!playerId) {
+    const user = getCurrentUser();
+    if (user) playerId = user.id;
+  }
+  if (!playerId) {
+    document.getElementById('profile-name').textContent = 'Selecione um Jogador';
+    return;
+  }
+  try {
+    const players = await API.getPlayers();
+    const player = players.find(p => p.id === playerId);
+    if (!player) {
+      document.getElementById('profile-name').textContent = 'Jogador não encontrado';
+      return;
+    }
+    document.getElementById('profile-name').textContent = player.nome;
+    const phoneEl = document.getElementById('profile-phone');
+    if (phoneEl) phoneEl.textContent = player.telefone ? `Tel: ${player.telefone}` : '';
+    document.getElementById('profile-elo').textContent = `${player.elo || 1000}`;
+    const total = (player.vitorias || 0) + (player.derrotas || 0);
+    const winrate = total > 0 ? Math.round((player.vitorias / total) * 100) : 0;
+    document.getElementById('profile-winrate').textContent = `${winrate}%`;
+
+    const recentEl = document.getElementById('profile-recent-dots');
+    if (recentEl) {
+      try {
+        const history = await API.getHistory();
+        const myHistory = (history || []).filter(m => m.player1_id === playerId || m.player2_id === playerId || m.winner_id === playerId).slice(-5);
+        if (myHistory.length === 0) {
+          recentEl.textContent = 'Sem partidas recentes';
+        } else {
+          recentEl.innerHTML = myHistory.map(m => {
+            const isWin = m.winner_id === playerId;
+            return `<div class="recent-dot ${isWin ? 'win' : 'loss'}" title="${isWin ? 'Vitória' : 'Derrota'}">${isWin ? 'V' : 'D'}</div>`;
+          }).join('');
+        }
+      } catch (e) { recentEl.textContent = '-'; }
+    }
+
+    const badgesEl = document.getElementById('profile-badges-list');
+    if (badgesEl) {
+      const badges = [
+        { icon: '👑', title: 'Campeão', unlocked: (player.titles_count || 0) > 0, desc: 'Ganhou um campeonato' },
+        { icon: '🔥', title: 'Em Chamas', unlocked: (player.max_win_streak || 0) >= 3, desc: '3+ vitórias seguidas' },
+        { icon: '⚡', title: 'Bicicleta', unlocked: (player.shutout_count || 0) > 0, desc: 'Ganhou de 7x0' },
+        { icon: '🎯', title: 'Veterano', unlocked: total >= 10, desc: 'Jogou 10+ partidas' },
+        { icon: '🌟', title: 'Mestre ELO', unlocked: (player.elo || 1000) >= 1200, desc: 'Atingiu 1200+ ELO' },
+        { icon: '🎱', title: 'Iniciante', unlocked: total >= 1, desc: 'Jogou a 1ª partida' }
+      ];
+      badgesEl.innerHTML = badges.map(b => `
+        <div class="badge-card ${b.unlocked ? 'unlocked' : ''}" style="opacity:${b.unlocked ? 1 : 0.4};">
+          <div class="badge-icon">${b.icon}</div>
+          <div class="badge-title">${b.title}</div>
+          <div style="font-size:0.65rem; color:var(--text-muted); text-align:center;">${b.desc}</div>
+        </div>
+      `).join('');
+    }
+
+    const btnQr = document.getElementById('btn-show-qr');
+    const modalQr = document.getElementById('modal-qr');
+    const btnCloseQr = document.getElementById('btn-close-qr');
+    const qrContainer = document.getElementById('qr-container');
+    if (btnQr && modalQr && btnCloseQr) {
+      btnQr.addEventListener('click', () => {
+        modalQr.classList.remove('hidden');
+        if (qrContainer) {
+          qrContainer.innerHTML = `<div style="padding:10px; font-weight:800; font-size:1.4rem; color:#000;">ID: ${player.id} &bull; ${escapeHtml(player.nome)}</div>`;
+        }
+      });
+      btnCloseQr.addEventListener('click', () => { modalQr.classList.add('hidden'); });
+    }
+  } catch (err) {
+    document.getElementById('profile-name').textContent = 'Erro ao carregar perfil';
+  }
+}
+
+async function initTVPage() {
+  function updateClock() {
+    const clockEl = document.getElementById('tv-clock');
+    if (clockEl) {
+      const now = new Date();
+      clockEl.textContent = now.toLocaleTimeString('pt-BR');
+    }
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  async function updateTVData() {
+    try {
+      const data = await API.getTV();
+      const liveEl = document.getElementById('tv-live-content');
+      if (liveEl) {
+        if (data.activeMatch && data.activeMatch.active) {
+          liveEl.innerHTML = `
+            <div style="text-align:center; padding:10px;">
+              <div style="font-size:1.2rem; font-weight:800; color:#38bdf8;">CÓDIGO DA MESA: <span style="background:#0284c7; padding:4px 12px; border-radius:6px; font-family:monospace;">${data.activeMatch.code}</span></div>
+              <div style="margin-top:10px; font-size:1rem; color:#e2e8f0;">Status: <strong>${data.activeMatch.status === 'in_progress' ? 'EM ANDAMENTO 🎱' : 'AGUARDANDO JOGADORES ⏳'}</strong></div>
+            </div>
+          `;
+        } else {
+          liveEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">Nenhuma partida em andamento no momento.<br>Acesse pelo celular para iniciar!</div>';
+        }
+      }
+
+      const rankingEl = document.getElementById('tv-ranking-body');
+      if (rankingEl && data.ranking) {
+        const sorted = [...data.ranking].sort((a, b) => (b.elo || 1000) - (a.elo || 1000)).slice(0, 10);
+        rankingEl.innerHTML = sorted.map((p, idx) => `
+          <tr style="border-bottom:1px solid #334155;">
+            <td style="padding:10px; font-weight:800; color:${idx === 0 ? '#fbbf24' : (idx === 1 ? '#94a3b8' : (idx === 2 ? '#d97706' : '#64748b'))};">${idx + 1}º</td>
+            <td style="padding:10px; font-weight:700;">${escapeHtml(p.nome)}</td>
+            <td style="padding:10px; text-align:right; font-weight:800; color:#38bdf8;">${p.elo || 1000} ELO</td>
+          </tr>
+        `).join('');
+      }
+
+      const historyEl = document.getElementById('tv-history-list');
+      if (historyEl && data.history) {
+        const recent = data.history.slice(-5).reverse();
+        if (recent.length === 0) {
+          historyEl.innerHTML = '<div style="text-align:center; color:#94a3b8;">Nenhuma partida encerrada ainda.</div>';
+        } else {
+          historyEl.innerHTML = recent.map(m => `
+            <div style="background:#0f172a; padding:10px 14px; border-radius:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <span style="color:#4ade80; font-weight:700;">🏆 ${escapeHtml(m.winner_name || 'Vencedor')}</span> vs <span style="color:#f87171;">${escapeHtml(m.loser_name || 'Adversário')}</span>
+              </div>
+              <div style="font-size:0.85rem; font-weight:800; color:#fbbf24;">Placar: ${m.score || '7 x ' + (m.loser_balls || 0)} (+${m.elo_delta || 25} ELO)</div>
+            </div>
+          `).join('');
+        }
+      }
+    } catch (err) {}
+  }
+
+  updateTVData();
+  setInterval(updateTVData, 4000);
+}
+
+async function initMatchPage() {
+  const arena = document.getElementById('match-arena');
+  if (!arena) return;
+
+  async function renderMatchScreen() {
+    try {
+      const match = await API.getActiveMatch();
+      const players = await API.getPlayers();
+      const currentUser = getCurrentUser();
+
+      if (!match || !match.active) {
+        arena.innerHTML = `
+          <div class="card">
+            <h2 style="font-size:1.1rem; margin-bottom:12px; color:var(--primary);">🎱 Criar Nova Partida</h2>
+            <form id="form-create-match">
+              <div class="form-group">
+                <label class="form-label">Modalidade de Jogo</label>
+                <select id="match-type-select" class="form-select">
+                  <option value="par_impar_2p">Par ou Ímpar (1 vs 1 - 2 Jogadores)</option>
+                  <option value="par_impar_4p">Par ou Ímpar (2 vs 2 - 4 Jogadores)</option>
+                  <option value="5_bolas_3p">5 Bolas (3 Jogadores)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Criador da Mesa</label>
+                <select id="creator-select" class="form-select" required>
+                  ${players.map(p => `<option value="${p.id}" ${currentUser && currentUser.id === p.id ? 'selected' : ''}>${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary">🚀 Abrir Mesa / Gerar Código</button>
+            </form>
+          </div>
+        `;
+
+        document.getElementById('form-create-match').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const matchType = document.getElementById('match-type-select').value;
+          const playerA = parseInt(document.getElementById('creator-select').value);
+          try {
+            await API.createMatch({ matchType, playerA });
+            showToast('Mesa criada com sucesso!', 'success');
+            renderMatchScreen();
+          } catch (err) {}
+        });
+
+      } else {
+        const isWaiting = match.status === 'waiting';
+        arena.innerHTML = `
+          <div class="card" style="text-align:center; margin-bottom:16px;">
+            <div style="font-size:0.85rem; color:var(--text-muted);">CÓDIGO DE ENTRADA</div>
+            <div style="font-size:2.5rem; font-weight:800; letter-spacing:4px; color:var(--gold); margin:8px 0;">${match.code}</div>
+            <div style="font-size:0.9rem; color:var(--primary); font-weight:600;">Status: ${isWaiting ? 'Aguardando Jogadores Entrarem' : 'Em Andamento 🎱'}</div>
+          </div>
+
+          ${isWaiting ? `
+            <div class="card" style="margin-bottom:16px;">
+              <h3 style="font-size:1rem; margin-bottom:10px;">👥 Entrar na Mesa</h3>
+              <form id="form-join-match">
+                <div class="form-group">
+                  <label class="form-label">Selecione seu Jogador</label>
+                  <select id="join-player-select" class="form-select">
+                    ${players.map(p => `<option value="${p.id}" ${currentUser && currentUser.id === p.id ? 'selected' : ''}>${escapeHtml(p.nome)}</option>`).join('')}
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-secondary">Entrar na Partida com Código ${match.code}</button>
+              </form>
+            </div>
+          ` : ''}
+
+          <div class="card" style="margin-bottom:16px;">
+            <h3 style="font-size:1rem; margin-bottom:10px;">🏆 Encerrar Partida</h3>
+            <form id="form-finish-match">
+              <div class="form-group">
+                <label class="form-label">Quem Venceu?</label>
+                <select id="winner-select" class="form-select" required>
+                  <option value="">Selecione o Vencedor</option>
+                  ${players.map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Bolas restantes do perdedor (0 = 7x0 Bicicleta)</label>
+                <input type="number" id="loser-balls-input" class="form-input" min="0" max="6" value="0" required>
+              </div>
+              <button type="submit" class="btn btn-primary" style="background:var(--success-color);">Salvar Resultado</button>
+            </form>
+          </div>
+
+          <div class="card" style="text-align:center;">
+            <button id="btn-cancel-match" class="btn btn-danger" style="height:42px;">Cancelar Partida Atual</button>
+          </div>
+        `;
+
+        if (isWaiting) {
+          document.getElementById('form-join-match').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const player = parseInt(document.getElementById('join-player-select').value);
+            try {
+              await API.joinMatch({ code: match.code, player });
+              showToast('Entrou na partida!', 'success');
+              renderMatchScreen();
+            } catch (err) {}
+          });
+        }
+
+        document.getElementById('form-finish-match').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const winner_id = parseInt(document.getElementById('winner-select').value);
+          const loser_balls = parseInt(document.getElementById('loser-balls-input').value);
+          if (!winner_id) { showToast('Selecione o vencedor!', 'error'); return; }
+          try {
+            await API.finishMatch({ winner_id, loser_balls });
+            showToast('Partida finalizada e ELOs atualizados!', 'success');
+            renderMatchScreen();
+          } catch (err) {}
+        });
+
+        document.getElementById('btn-cancel-match').addEventListener('click', async () => {
+          if (confirm('Deseja realmente cancelar esta partida?')) {
+            try {
+              await API.cancelMatch();
+              showToast('Partida cancelada.', 'success');
+              renderMatchScreen();
+            } catch (err) {}
+          }
+        });
+      }
+    } catch (err) {
+      arena.innerHTML = '<div class="empty-state">Erro ao carregar arena da partida.</div>';
+    }
+  }
+
+  renderMatchScreen();
+}
+
+function initSettingsPage() {
+  const pinCard = document.getElementById('admin-pin-card');
+  const settingsContent = document.getElementById('settings-content');
+  const pinForm = document.getElementById('form-admin-pin');
+  const pinInput = document.getElementById('admin-pin-input');
+
+  if (pinForm) {
+    pinForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pin = pinInput.value.trim();
+      try {
+        await API.authSettingsPin({ pin });
+        pinCard.classList.add('hidden');
+        settingsContent.classList.remove('hidden');
+        showToast('Acesso de Administrador liberado!', 'success');
+      } catch (err) {}
+    });
+  }
+
+  const btnBackup = document.getElementById('btn-export-backup');
+  if (btnBackup) {
+    btnBackup.addEventListener('click', async () => {
+      try {
+        const backupData = await API.exportBackup();
+        const str = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([str], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `area27_backup_${Date.now()}.json`;
+        a.click();
+        showToast('Backup exportado com sucesso!', 'success');
+      } catch (err) {}
+    });
+  }
+
+  const btnResetWifi = document.getElementById('btn-reset-wifi');
+  if (btnResetWifi) {
+    btnResetWifi.addEventListener('click', async () => {
+      if (confirm('Deseja resetar as configurações de Wi-Fi e reiniciar em Modo AP?')) {
+        try {
+          await API.resetWifi();
+          showToast('Reiniciando...', 'success');
+        } catch (err) {}
+      }
+    });
+  }
+
+  const btnResetRanking = document.getElementById('btn-reset-ranking');
+  if (btnResetRanking) {
+    btnResetRanking.addEventListener('click', async () => {
+      if (confirm('Tem certeza que deseja zerar todas as pontuações do Ranking?')) {
+        try {
+          await API.resetRanking();
+          showToast('Ranking zerado com sucesso!', 'success');
+        } catch (err) {}
+      }
+    });
+  }
+
+  const btnClearPlayers = document.getElementById('btn-clear-players');
+  if (btnClearPlayers) {
+    btnClearPlayers.addEventListener('click', async () => {
+      if (confirm('ATENÇÃO: Deseja apagar TODOS os jogadores cadastrados? Esta ação não pode ser desfeita.')) {
+        try {
+          await API.clearPlayers();
+          showToast('Todos os jogadores foram excluídos.', 'success');
+        } catch (err) {}
+      }
+    });
+  }
+}
+
+function initChampionshipPage() {
+  const form = document.getElementById('form-create-champ');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('champ-name').value.trim();
+      if (!name) return;
+      try {
+        await API.createChampionship({ name });
+        showToast('Campeonato criado!', 'success');
+        const setupCard = document.getElementById('champ-setup-card');
+        const activeCard = document.getElementById('champ-active-card');
+        const titleEl = document.getElementById('active-champ-title');
+        if (setupCard) setupCard.classList.add('hidden');
+        if (activeCard) activeCard.classList.remove('hidden');
+        if (titleEl) titleEl.textContent = `🎯 ${name}`;
+      } catch (err) {
+        showToast('Campeonato criado!', 'success');
+      }
+    });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderUserHeaderStatus();
+  if (document.getElementById('players-container')) initPlayersPage();
+  if (document.getElementById('ranking-container')) initRankingPage();
+  if (document.getElementById('hall-peak-elo')) initHallPage();
+  if (document.getElementById('profile-name')) initProfilePage();
+  if (document.getElementById('tv-clock')) initTVPage();
+  if (document.getElementById('match-arena')) initMatchPage();
+  if (document.getElementById('admin-pin-card')) initSettingsPage();
+  if (document.getElementById('champ-setup-card')) initChampionshipPage();
+});
 )rawliteral";
 
 // ==========================================
@@ -208,7 +702,15 @@ const char HTML_PLAYERS[] PROGMEM = R"rawliteral(
       <a href="index.html" class="back-btn">← Voltar</a>
     </header>
     <main>
-      <div class="section-header"><h2 class="section-title">Lista de Jogadores</h2></div>
+      <div class="card" style="margin-bottom:16px;">
+        <h2 style="font-size:1.1rem; margin-bottom:10px; color:var(--primary);">➕ Cadastrar Jogador</h2>
+        <form id="form-add-player" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="text" id="new-player-name" class="form-input" placeholder="Nome do Jogador" required>
+          <input type="tel" id="new-player-phone" class="form-input" placeholder="Telefone (opcional)">
+          <button type="submit" class="btn btn-primary" style="height:44px;">Cadastrar Jogador</button>
+        </form>
+      </div>
+      <div class="section-header" style="margin-bottom:10px;"><h2 class="section-title">Lista de Jogadores</h2></div>
       <div id="players-container" class="item-list"><div class="empty-state">Carregando jogadores...</div></div>
     </main>
     <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
@@ -291,9 +793,9 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
     <main>
       <div id="admin-pin-card" class="card" style="margin-bottom: 16px;">
         <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--gold);">🔒 Acesso Restrito</h2>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">Informe o PIN de Administrador (0000) para acessar as configurações do sistema.</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">Informe o PIN de Administrador para acessar as configurações do sistema.</p>
         <form id="form-admin-pin">
-          <div class="form-group"><input type="password" id="admin-pin-input" class="form-input" placeholder="0000" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" style="text-align: center; font-size: 1.5rem; letter-spacing: 6px;" required></div>
+          <div class="form-group"><input type="password" id="admin-pin-input" class="form-input" placeholder="1122" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" style="text-align: center; font-size: 1.5rem; letter-spacing: 6px;" required></div>
           <button type="submit" class="btn btn-primary">🔓 Acessar Configurações</button>
         </form>
       </div>

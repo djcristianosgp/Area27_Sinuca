@@ -348,7 +348,7 @@ bool handleFileRead(String path) {
 void handleApiTV() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   String json = "{\n";
-  json += "  \"activeMatch\": " + (activeMatch.active ? "true" : "false") + ",\n";
+  json += "  \"activeMatch\": " + String(activeMatch.active ? "true" : "false") + ",\n";
   json += "  \"ranking\": " + getPlayersJSON() + ",\n";
   json += "  \"history\": " + getHistoryJSON() + "\n";
   json += "}";
@@ -616,7 +616,7 @@ void handleSettingsAuth() {
   if (pin == "0000") {
     server.send(200, "application/json", "{\"success\":true,\"message\":\"Acesso liberado\"}");
   } else {
-    server.send(401, "application/json", "{\"error\":\"PIN de Administrador incorreto. Tente 0000.\"}");
+    server.send(401, "application/json", "{\"error\":\"PIN de Administrador incorreto. Tente novamente.\"}");
   }
 }
 

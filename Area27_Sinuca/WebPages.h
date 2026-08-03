@@ -129,7 +129,9 @@ const API = {
   getChampionship() { return this.request('/api/v1/championships'); },
   createChampionship(d) { return this.request('/api/v1/championships', { method: 'POST', body: JSON.stringify(d) }); },
   exportBackup() { return this.request('/api/v1/backup/export'); },
-  importBackup(d) { return this.request('/api/v1/backup/import', { method: 'POST', body: JSON.stringify(d) }); }
+  importBackup(d) { return this.request('/api/v1/backup/import', { method: 'POST', body: JSON.stringify(d) }); },
+  checkUpdate() { return this.request('/api/v1/update/check'); },
+  startUpdate(d) { return this.request('/api/v1/update/start', { method: 'POST', body: JSON.stringify(d) }); }
 };
 
 function showToast(msg, type = 'success') {
@@ -736,6 +738,52 @@ function initSettingsPage() {
       }
     });
   }
+
+  const btnCheckUpdate = document.getElementById('btn-check-update');
+  const btnStartUpdate = document.getElementById('btn-start-update');
+  const statusText = document.getElementById('update-status-text');
+  let latestFirmwareUrl = '';
+
+  if (btnCheckUpdate) {
+    btnCheckUpdate.addEventListener('click', async () => {
+      btnCheckUpdate.disabled = true;
+      btnCheckUpdate.textContent = '⏳ Verificando...';
+      try {
+        const res = await API.checkUpdate();
+        btnCheckUpdate.disabled = false;
+        btnCheckUpdate.textContent = '🔍 Verificar Atualização';
+        if (res.update_available) {
+          latestFirmwareUrl = res.firmware_url;
+          if (statusText) {
+            statusText.innerHTML = `<span style="color: #4ade80; font-weight:700;">✨ Nova versão ${escapeHtml(res.latest_version)} disponível no GitHub!</span><br><small style="color: #94a3b8;">${escapeHtml(res.changelog || '')}</small>`;
+          }
+          if (btnStartUpdate) btnStartUpdate.classList.remove('hidden');
+        } else {
+          if (statusText) {
+            statusText.innerHTML = `<span style="color: #38bdf8;">✅ Seu sistema já está atualizado na versão mais recente (${escapeHtml(res.current_version)}).</span>`;
+          }
+          if (btnStartUpdate) btnStartUpdate.classList.add('hidden');
+        }
+      } catch (err) {
+        btnCheckUpdate.disabled = false;
+        btnCheckUpdate.textContent = '🔍 Verificar Atualização';
+        if (statusText) statusText.textContent = 'Erro ao conectar ao GitHub. Verifique a conexão Wi-Fi.';
+      }
+    });
+  }
+
+  if (btnStartUpdate) {
+    btnStartUpdate.addEventListener('click', async () => {
+      if (confirm('Confirma o início da atualização automática via GitHub? O ESP8266 irá baixar a versão e reiniciar em instantes.')) {
+        try {
+          btnStartUpdate.disabled = true;
+          btnStartUpdate.textContent = '⏳ Atualizando...';
+          await API.startUpdate({ url: latestFirmwareUrl });
+          showToast('Atualização iniciada! O sistema irá reiniciar em 30 segundos.', 'success');
+        } catch (err) {}
+      }
+    });
+  }
 }
 
 function initChampionshipPage() {
@@ -954,6 +1002,20 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
         <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🏆 Zerar Ranking</h2>
           <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
+        </div>
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--primary);">☁️ Atualização do Sistema (GitHub)</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+            Verifique e instale automaticamente novas versões do firmware diretamente do repositório GitHub.
+          </p>
+          <div id="update-info-container" style="background: #1e293b; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;">
+            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.0</strong></div>
+            <div id="update-status-text" style="color: var(--text-muted); margin-top: 4px;">Clique no botão abaixo para verificar se há atualizações na nuvem.</div>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" id="btn-check-update" class="btn btn-secondary" style="flex: 1;">🔍 Verificar Atualização</button>
+            <button type="button" id="btn-start-update" class="btn btn-primary hidden" style="flex: 1; background: var(--success-color);">🚀 Atualizar Agora (GitHub)</button>
+          </div>
         </div>
         <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Excluir Todos os Jogadores</h2>

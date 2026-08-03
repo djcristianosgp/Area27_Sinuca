@@ -98,6 +98,22 @@
           <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
         </div>
 
+        <!-- Config 4.5: Atualização GitHub -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--primary);">☁️ Atualização do Sistema (GitHub)</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+            Verifique e instale automaticamente novas versões do firmware diretamente do repositório GitHub sem cabo USB.
+          </p>
+          <div id="update-info-container" style="background: #1e293b; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;">
+            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.0</strong></div>
+            <div id="update-status-text" style="color: var(--text-muted); margin-top: 4px;">Clique no botão abaixo para verificar se há atualizações na nuvem.</div>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" id="btn-check-update" class="btn btn-secondary" style="flex: 1;">🔍 Verificar Atualização</button>
+            <button type="button" id="btn-start-update" class="btn btn-primary hidden" style="flex: 1; background: var(--success-color);">🚀 Atualizar Agora (GitHub)</button>
+          </div>
+        </div>
+
         <!-- Config 5: Excluir Jogadores -->
         <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Gerenciar Jogadores</h2>

@@ -95,7 +95,9 @@ const API = {
   getChampionship() { return this.request('/api/v1/championships'); },
   createChampionship(data) { return this.request('/api/v1/championships', { method: 'POST', body: JSON.stringify(data) }); },
   exportBackup() { return this.request('/api/v1/backup/export'); },
-  importBackup(data) { return this.request('/api/v1/backup/import', { method: 'POST', body: JSON.stringify(data) }); }
+  importBackup(data) { return this.request('/api/v1/backup/import', { method: 'POST', body: JSON.stringify(data) }); },
+  checkUpdate() { return this.request('/api/v1/update/check'); },
+  startUpdate(data) { return this.request('/api/v1/update/start', { method: 'POST', body: JSON.stringify(data) }); }
 };
 
 function showToast(message, type = 'success') {
@@ -924,6 +926,52 @@ function initSettingsPage() {
           setCurrentUser(null);
           showToast('Todos os jogadores foram excluídos.', 'success');
         } catch (e) {}
+      }
+    });
+  }
+
+  const btnCheckUpdate = document.getElementById('btn-check-update');
+  const btnStartUpdate = document.getElementById('btn-start-update');
+  const statusText = document.getElementById('update-status-text');
+  let latestFirmwareUrl = '';
+
+  if (btnCheckUpdate) {
+    btnCheckUpdate.addEventListener('click', async () => {
+      btnCheckUpdate.disabled = true;
+      btnCheckUpdate.textContent = '⏳ Verificando...';
+      try {
+        const res = await API.checkUpdate();
+        btnCheckUpdate.disabled = false;
+        btnCheckUpdate.textContent = '🔍 Verificar Atualização';
+        if (res.update_available) {
+          latestFirmwareUrl = res.firmware_url;
+          if (statusText) {
+            statusText.innerHTML = `<span style="color: #4ade80; font-weight:700;">✨ Nova versão ${escapeHtml(res.latest_version)} disponível no GitHub!</span><br><small style="color: #94a3b8;">${escapeHtml(res.changelog || '')}</small>`;
+          }
+          if (btnStartUpdate) btnStartUpdate.classList.remove('hidden');
+        } else {
+          if (statusText) {
+            statusText.innerHTML = `<span style="color: #38bdf8;">✅ Seu sistema já está atualizado na versão mais recente (${escapeHtml(res.current_version)}).</span>`;
+          }
+          if (btnStartUpdate) btnStartUpdate.classList.add('hidden');
+        }
+      } catch (err) {
+        btnCheckUpdate.disabled = false;
+        btnCheckUpdate.textContent = '🔍 Verificar Atualização';
+        if (statusText) statusText.textContent = 'Erro ao conectar ao GitHub. Verifique a conexão Wi-Fi.';
+      }
+    });
+  }
+
+  if (btnStartUpdate) {
+    btnStartUpdate.addEventListener('click', async () => {
+      if (confirm('Confirma o início da atualização automática via GitHub? O ESP8266 irá baixar a versão e reiniciar em instantes.')) {
+        try {
+          btnStartUpdate.disabled = true;
+          btnStartUpdate.textContent = '⏳ Atualizando...';
+          await API.startUpdate({ url: latestFirmwareUrl });
+          showToast('Atualização iniciada! O sistema irá reiniciar em 30 segundos.', 'success');
+        } catch (err) {}
       }
     });
   }

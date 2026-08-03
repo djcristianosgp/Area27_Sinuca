@@ -13,8 +13,14 @@
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266NetBIOS.h>
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+#include <WiFiClientSecure.h>
 #include <LittleFS.h>
 #include "WebPages.h"
+
+const char* CURRENT_VERSION = "2.0.0";
+const char* GITHUB_VERSION_URL = "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/version.json";
 
 // DNS Server for Captive Portal
 DNSServer dnsServer;
@@ -619,6 +625,116 @@ void handleClearPlayers() {
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Jogadores limpos\"}");
 }
 
+void handleCheckUpdate() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    server.send(400, "application/json", "{\"error\":\"ESP8266 não está conectado à internet Wi-Fi.\"}");
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(10000);
+
+  HTTPClient http;
+  if (!http.begin(client, GITHUB_VERSION_URL)) {
+    server.send(500, "application/json", "{\"error\":\"Falha ao conectar ao GitHub.\"}");
+    return;
+  }
+
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    server.send(500, "application/json", "{\"error\":\"GitHub retornou HTTP " + String(httpCode) + "\"}");
+    http.end();
+    return;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  String latestVersion = CURRENT_VERSION;
+  String firmwareUrl = "";
+  String changelog = "";
+
+  int verPos = payload.indexOf("\"version\":\"");
+  if (verPos != -1) {
+    int start = payload.indexOf("\"", verPos + 10) + 1;
+    int end = payload.indexOf("\"", start);
+    latestVersion = payload.substring(start, end);
+  }
+
+  int urlPos = payload.indexOf("\"firmware_url\":\"");
+  if (urlPos != -1) {
+    int start = payload.indexOf("\"", urlPos + 15) + 1;
+    int end = payload.indexOf("\"", start);
+    firmwareUrl = payload.substring(start, end);
+  }
+
+  int changePos = payload.indexOf("\"changelog\":\"");
+  if (changePos != -1) {
+    int start = payload.indexOf("\"", changePos + 12) + 1;
+    int end = payload.indexOf("\"", start);
+    changelog = payload.substring(start, end);
+  }
+
+  bool updateAvailable = (latestVersion != CURRENT_VERSION && latestVersion.length() > 0);
+
+  String jsonResponse = "{";
+  jsonResponse += "\"current_version\":\"" + String(CURRENT_VERSION) + "\",";
+  jsonResponse += "\"latest_version\":\"" + latestVersion + "\",";
+  jsonResponse += "\"update_available\":" + String(updateAvailable ? "true" : "false") + ",";
+  jsonResponse += "\"firmware_url\":\"" + firmwareUrl + "\",";
+  jsonResponse += "\"changelog\":\"" + changelog + "\"";
+  jsonResponse += "}";
+
+  server.send(200, "application/json", jsonResponse);
+}
+
+void handleStartUpdate() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    server.send(400, "application/json", "{\"error\":\"ESP8266 não está conectado à internet Wi-Fi.\"}");
+    return;
+  }
+
+  String binUrl = "";
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    int urlPos = body.indexOf("\"url\":\"");
+    if (urlPos != -1) {
+      int start = body.indexOf("\"", urlPos + 6) + 1;
+      int end = body.indexOf("\"", start);
+      binUrl = body.substring(start, end);
+    }
+  }
+
+  if (binUrl.length() == 0) {
+    binUrl = "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/firmware.bin";
+  }
+
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Iniciando atualização pelo GitHub. O ESP8266 irá reiniciar em instantes...\"}");
+  delay(1000);
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  
+  t_httpUpdate_return ret = ESPhttpUpdate.update(client, binUrl);
+
+  switch (ret) {
+    case HTTP_UPDATE_FAILED:
+      Serial.printf("[OTA] HTTP update failed. Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+      break;
+    case HTTP_UPDATE_NO_UPDATES:
+      Serial.println("[OTA] HTTP update: No updates.");
+      break;
+    case HTTP_UPDATE_OK:
+      Serial.println("[OTA] HTTP update OK. Rebooting...");
+      break;
+  }
+}
+
 void handleResetRanking() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   for (int i = 0; i < playerCount; i++) {
@@ -929,6 +1045,8 @@ void handleFinishMatch() {
   activeMatch.loser_balls = loserBalls;
 
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida registrada!\"}");
+}
+
 void handleCancelMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0, 0};
@@ -990,6 +1108,8 @@ void setup() {
   server.on("/api/v1/seasons/reset",  HTTP_POST, handleApiResetSeason);
   server.on("/api/v1/backup/export",  HTTP_GET,  handleApiExportBackup);
   server.on("/api/v1/backup/import",  HTTP_POST, handleApiImportBackup);
+  server.on("/api/v1/update/check",   HTTP_GET,  handleCheckUpdate);
+  server.on("/api/v1/update/start",   HTTP_POST, handleStartUpdate);
 
   // Standard API Routes
   server.on("/players",                HTTP_GET,  handleGetPlayers);

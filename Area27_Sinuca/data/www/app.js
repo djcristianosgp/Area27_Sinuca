@@ -73,6 +73,7 @@ const API = {
   registerPlayer(data) { return this.request('/players', { method: 'POST', body: JSON.stringify(data) }); },
   loginPlayer(data) { return this.request('/players/login', { method: 'POST', body: JSON.stringify(data) }); },
   deletePlayer(id) { return this.request('/players/delete', { method: 'POST', body: JSON.stringify({ id }) }); },
+  resetPlayerPassword(data) { return this.request('/players/reset-password', { method: 'POST', body: JSON.stringify(data) }); },
   clearPlayers() { return this.request('/players/clear', { method: 'POST' }); },
   resetRanking() { return this.request('/ranking/reset', { method: 'POST' }); },
   getRanking() { return this.request('/ranking'); },
@@ -170,30 +171,26 @@ function renderTVLiveMatch(match) {
     return;
   }
 
-  const p1 = match.players && match.players[0] ? match.players[0] : { nome: 'Jogador 1', elo: 1000 };
-  const p2 = match.players && match.players[1] ? match.players[1] : { nome: 'Jogador 2', elo: 1000 };
-
-  if (!matchStartTime) matchStartTime = Date.now();
-  const elapsedSec = Math.floor((Date.now() - matchStartTime) / 1000);
-  const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
-  const secs = String(elapsedSec % 60).padStart(2, '0');
+  const isWaiting = match.status === 'waiting';
+  const playersList = (match.players || []).map(p => {
+    let statusBadge = '';
+    if (p.invite === 'creator' || p.invite === 'accepted') statusBadge = '✅ Confirmado';
+    else if (p.invite === 'pending') statusBadge = '⏳ Aguardando Aceite';
+    else statusBadge = '👤 Vaga Livre';
+    return `<div style="padding:6px 12px; background:#0f172a; border-radius:6px; margin:4px 0; display:flex; justify-content:space-between; align-items:center; font-size:0.9rem;">
+      <span><strong>${escapeHtml(p.nome)}</strong></span>
+      <span style="font-size:0.8rem; color:${p.invite === 'pending' ? '#fbbf24' : (p.id > 0 ? '#4ade80' : '#94a3b8')};">${statusBadge}</span>
+    </div>`;
+  }).join('');
 
   container.innerHTML = `
-    <div style="text-align: center; font-size: 0.95rem; color: #94a3b8; margin-bottom: 8px;">
-      MODALIDADE: <strong style="color:#fbbf24;">${match.matchType === 'par_impar_2p' ? '1v1 PAR OU ÍMPAR' : 'DESAFIO DA MESA'}</strong> | CÓDIGO DA SALA: <strong style="color:#38bdf8;">${match.code || '----'}</strong>
-    </div>
-
-    <div class="tv-match-timer">⏱️ ${mins}:${secs}</div>
-
-    <div class="tv-players-versus">
-      <div class="tv-player-box">
-        <div class="tv-player-name">${escapeHtml(p1.nome)}</div>
-        <div class="tv-player-elo">★ ${p1.elo || 1000} ELO</div>
+    <div style="text-align:center; padding:10px;">
+      <div style="font-size:1.1rem; font-weight:800; color:#38bdf8;">CÓDIGO DA MESA: <span style="background:#0284c7; color:#fff; padding:4px 14px; border-radius:6px; font-family:monospace; font-size:1.5rem;">${match.code}</span></div>
+      <div style="margin:10px 0; font-size:1rem; color:${isWaiting ? '#fbbf24' : '#4ade80'}; font-weight:700;">
+        ${isWaiting ? '⏳ PARTIDA ABERTA (AGUARDANDO CONFIRMAÇÃO DE JOGADORES)' : '🎱 PARTIDA EM ANDAMENTO'}
       </div>
-      <div class="tv-vs">VS</div>
-      <div class="tv-player-box">
-        <div class="tv-player-name">${escapeHtml(p2.nome)}</div>
-        <div class="tv-player-elo">★ ${p2.elo || 1000} ELO</div>
+      <div style="max-width:380px; margin:10px auto; text-align:left;">
+        ${playersList}
       </div>
     </div>
   `;
@@ -607,6 +604,22 @@ function advanceBracketWinner(rIdx, mIdx, slotNum) {
   renderChampionshipBracket(activeChampionshipData);
 }
 
+async function promptLoginForUser(id, nome) {
+  const senha = prompt(`Digite a senha PIN (4 dígitos) para logar como ${nome}:`);
+  if (senha === null) return;
+  if (!senha.trim()) {
+    showToast('Senha não informada.', 'error');
+    return;
+  }
+  try {
+    const res = await API.loginPlayer({ id: Number(id), senha: senha.trim() });
+    if (res && res.player) {
+      setCurrentUser(res.player);
+      showToast(`Bem-vindo, ${res.player.nome}!`, 'success');
+    }
+  } catch (err) {}
+}
+
 /**
  * Page: Jogadores (players.html)
  */
@@ -656,9 +669,10 @@ async function initPlayersPage() {
               <a href="profile.html?id=${p.id}" style="color:inherit; text-decoration:none;" class="player-name">👤 ${escapeHtml(p.nome)}</a>
               <span class="player-phone">📞 ${escapeHtml(p.telefone)}</span>
             </div>
-            <div class="player-stats">
+            <div class="player-stats" style="display:flex; align-items:center; gap:8px;">
               <span class="badge-elo">${p.elo || 1000} ELO</span>
               <div class="record">${p.vitorias || 0}V / ${p.derrotas || 0}D</div>
+              <button onclick="promptLoginForUser(${p.id}, '${escapeHtml(p.nome)}')" class="btn btn-secondary" style="height:32px; padding:0 8px; font-size:0.8rem;">Entrar</button>
             </div>
           </div>
         `).join('');
@@ -771,11 +785,6 @@ function initSettingsPage() {
       e.preventDefault();
       const pin = pinInput ? pinInput.value.trim() : '';
 
-      if (pin !== '0000') {
-        showToast('PIN de Administrador incorreto (PIN: 0000)', 'error');
-        return;
-      }
-
       try {
         await API.authSettingsPin({ pin });
         sessionStorage.setItem('area27_admin_auth', 'true');
@@ -783,6 +792,51 @@ function initSettingsPage() {
         adminCard.classList.add('hidden');
         settingsContent.classList.remove('hidden');
       } catch (err) {}
+    });
+  }
+
+  const selectManage = document.getElementById('select-manage-player');
+  async function loadManagePlayersSelect() {
+    if (!selectManage) return;
+    try {
+      const players = await API.getPlayers();
+      if (!players || players.length === 0) {
+        selectManage.innerHTML = '<option value="">Nenhum jogador cadastrado</option>';
+        return;
+      }
+      selectManage.innerHTML = '<option value="">Selecione um jogador...</option>' +
+        players.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('');
+    } catch (err) {}
+  }
+  loadManagePlayersSelect();
+
+  const btnResetPass = document.getElementById('btn-reset-player-pass');
+  if (btnResetPass) {
+    btnResetPass.addEventListener('click', async () => {
+      const playerId = selectManage ? parseInt(selectManage.value) : 0;
+      if (!playerId) { showToast('Selecione um jogador!', 'error'); return; }
+      const newPass = prompt('Digite a nova senha PIN (4 dígitos) ou clique em OK para resetar para 0000:', '0000');
+      if (newPass === null) return;
+      try {
+        await API.resetPlayerPassword({ id: playerId, senha: newPass.trim() || '0000' });
+        showToast('Senha do jogador resetada com sucesso!', 'success');
+      } catch (err) {}
+    });
+  }
+
+  const btnDeleteSingle = document.getElementById('btn-delete-single-player');
+  if (btnDeleteSingle) {
+    btnDeleteSingle.addEventListener('click', async () => {
+      const playerId = selectManage ? parseInt(selectManage.value) : 0;
+      if (!playerId) { showToast('Selecione um jogador!', 'error'); return; }
+      const selectedName = selectManage.options[selectManage.selectedIndex].text;
+      if (confirm(`Tem certeza que deseja excluir o jogador "${selectedName}"? Esta ação não pode ser desfeita.`)) {
+        try {
+          await API.deletePlayer(playerId);
+          showToast('Jogador excluído com sucesso!', 'success');
+          loadManagePlayersSelect();
+        } catch (err) {}
+      }
     });
   }
 

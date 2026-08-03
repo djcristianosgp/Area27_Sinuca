@@ -576,6 +576,41 @@ void handleDeletePlayer() {
   }
 }
 
+void handleResetPlayerPassword() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) return;
+  String body = server.arg("plain");
+
+  int targetId = 0;
+  int idPos = body.indexOf("\"id\":");
+  if (idPos != -1) {
+    int colonPos = body.indexOf(":", idPos);
+    targetId = body.substring(colonPos + 1).toInt();
+  }
+
+  String newPass = "0000";
+  int senPos = body.indexOf("\"senha\":\"");
+  if (senPos == -1) senPos = body.indexOf("\"senha\": \"");
+  if (senPos != -1) {
+    int senStart = body.indexOf("\"", senPos + 7) + 1;
+    int senEnd   = body.indexOf("\"", senStart);
+    newPass      = body.substring(senStart, senEnd);
+  }
+
+  Player* target = nullptr;
+  for (int i = 0; i < playerCount; i++) {
+    if (players[i].id == targetId) { target = &players[i]; break; }
+  }
+
+  if (target) {
+    target->senha = newPass;
+    savePlayersToFile();
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Senha do jogador resetada com sucesso!\"}");
+  } else {
+    server.send(404, "application/json", "{\"error\":\"Jogador não encontrado\"}");
+  }
+}
+
 void handleClearPlayers() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   playerCount = 0;
@@ -620,6 +655,21 @@ void handleSettingsAuth() {
   }
 }
 
+void updateMatchStatus() {
+  if (!activeMatch.active) return;
+  int acceptedCount = 0;
+  for (int i = 0; i < activeMatch.maxPlayers; i++) {
+    if (activeMatch.playerIds[i] > 0 && (activeMatch.invites[i] == "creator" || activeMatch.invites[i] == "accepted")) {
+      acceptedCount++;
+    }
+  }
+  if (acceptedCount >= activeMatch.maxPlayers) {
+    activeMatch.status = "in_progress";
+  } else {
+    activeMatch.status = "waiting";
+  }
+}
+
 void handleCreateMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   if (!server.hasArg("plain")) return;
@@ -636,7 +686,18 @@ void handleCreateMatch() {
   int creatorId = 0;
   int pAPos = body.indexOf("\"playerA\":");
   if (pAPos == -1) pAPos = body.indexOf("\"creator\":");
-  if (pAPos != -1) creatorId = body.substring(pAPos + 10).toInt();
+  if (pAPos != -1) {
+    int colonPos = body.indexOf(":", pAPos);
+    creatorId = body.substring(colonPos + 1).toInt();
+  }
+
+  int playerBId = 0;
+  int pBPos = body.indexOf("\"playerB\":");
+  if (pBPos == -1) pBPos = body.indexOf("\"opponent\":");
+  if (pBPos != -1) {
+    int colonPos = body.indexOf(":", pBPos);
+    playerBId = body.substring(colonPos + 1).toInt();
+  }
 
   int maxP = (type == "par_impar_4p") ? 4 : ((type == "5_bolas_3p") ? 3 : 2);
   String code = generateMatchCode();
@@ -656,9 +717,15 @@ void handleCreateMatch() {
 
   activeMatch.playerIds[0] = creatorId;
   activeMatch.invites[0] = "creator";
-  activeMatch.status = "waiting";
 
-  server.send(200, "application/json", "{\"success\":true,\"code\":\"" + code + "\",\"matchType\":\"" + type + "\",\"status\":\"waiting\"}");
+  if (playerBId > 0 && playerBId != creatorId) {
+    activeMatch.playerIds[1] = playerBId;
+    activeMatch.invites[1] = "pending";
+  }
+
+  updateMatchStatus();
+
+  server.send(200, "application/json", "{\"success\":true,\"code\":\"" + code + "\",\"matchType\":\"" + type + "\",\"status\":\"" + activeMatch.status + "\"}");
 }
 
 void handleJoinMatch() {
@@ -676,13 +743,29 @@ void handleJoinMatch() {
 
   int pVal = 0;
   int pPos = body.indexOf("\"player\":");
-  if (pPos != -1) pVal = body.substring(pPos + 9).toInt();
+  if (pPos == -1) pPos = body.indexOf("\"player_id\":");
+  if (pPos != -1) {
+    int colonPos = body.indexOf(":", pPos);
+    pVal = body.substring(colonPos + 1).toInt();
+  }
 
   inputCode.toUpperCase();
   inputCode.trim();
 
   if (!activeMatch.active || activeMatch.code != inputCode) {
     server.send(400, "application/json", "{\"error\":\"Código de partida inválido\"}");
+    return;
+  }
+
+  int existingSlot = -1;
+  for (int i = 0; i < activeMatch.maxPlayers; i++) {
+    if (activeMatch.playerIds[i] == pVal) { existingSlot = i; break; }
+  }
+
+  if (existingSlot != -1) {
+    activeMatch.invites[existingSlot] = "accepted";
+    updateMatchStatus();
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Convite aceito!\",\"slot\":" + String(existingSlot) + ",\"status\":\"" + activeMatch.status + "\"}");
     return;
   }
 
@@ -697,8 +780,10 @@ void handleJoinMatch() {
   }
 
   activeMatch.playerIds[emptySlot] = pVal;
-  activeMatch.invites[emptySlot] = "pending";
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Solicitação de vínculo realizada!\",\"slot\":" + String(emptySlot) + "}");
+  activeMatch.invites[emptySlot] = "accepted";
+  updateMatchStatus();
+
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Solicitação de vínculo realizada!\",\"slot\":" + String(emptySlot) + ",\"status\":\"" + activeMatch.status + "\"}");
 }
 
 void handleRespondInvite() {
@@ -708,7 +793,10 @@ void handleRespondInvite() {
 
   int pVal = 0;
   int pPos = body.indexOf("\"player\":");
-  if (pPos != -1) pVal = body.substring(pPos + 9).toInt();
+  if (pPos != -1) {
+    int colonPos = body.indexOf(":", pPos);
+    pVal = body.substring(colonPos + 1).toInt();
+  }
 
   bool accept = (body.indexOf("\"accept\":false") == -1);
 
@@ -722,11 +810,11 @@ void handleRespondInvite() {
   if (slotIndex != -1) {
     if (accept) {
       activeMatch.invites[slotIndex] = "accepted";
-      activeMatch.status = "in_progress";
     } else {
       activeMatch.playerIds[slotIndex] = 0;
       activeMatch.invites[slotIndex] = "empty";
     }
+    updateMatchStatus();
   }
   server.send(200, "application/json", "{\"success\":true,\"status\":\"" + activeMatch.status + "\"}");
 }
@@ -776,14 +864,19 @@ void handleFinishMatch() {
   if (!server.hasArg("plain")) return;
 
   String body = server.arg("plain");
-  int winPos = body.indexOf("\"winner\":");
-  if (winPos == -1) return;
-  int winVal = body.substring(winPos + 9).toInt();
+  int winPos = body.indexOf("\"winner_id\":");
+  if (winPos == -1) winPos = body.indexOf("\"winner\":");
+  if (winPos == -1) { server.send(400, "application/json", "{\"error\":\"Vencedor ausente\"}"); return; }
+  int colonPos = body.indexOf(":", winPos);
+  int winVal = body.substring(colonPos + 1).toInt();
 
   int loserBalls = 0;
   int ballsPos = body.indexOf("\"loserBalls\":");
   if (ballsPos == -1) ballsPos = body.indexOf("\"loser_balls\":");
-  if (ballsPos != -1) loserBalls = body.substring(ballsPos + 12).toInt();
+  if (ballsPos != -1) {
+    int bColon = body.indexOf(":", ballsPos);
+    loserBalls = body.substring(bColon + 1).toInt();
+  }
 
   int p1_id = activeMatch.playerIds[0];
   int p2_id = activeMatch.playerIds[1];
@@ -824,20 +917,18 @@ void handleFinishMatch() {
 
   savePlayersToFile();
 
-  // Append match entry to history array
   if (matchHistoryCount < MAX_HISTORY) {
     matchHistory[matchHistoryCount] = { matchHistoryCount + 1, activeMatch.matchType, p1_id, p2_id, winVal, loserBalls, abs(eloDelta), "Hoje" };
     matchHistoryCount++;
     saveHistoryToFile();
   }
 
+  activeMatch.active = false;
   activeMatch.status = "finished";
   activeMatch.winner_id = winVal;
   activeMatch.loser_balls = loserBalls;
 
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida registrada!\"}");
-}
-
 void handleCancelMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0, 0};
@@ -853,12 +944,13 @@ void startAPMode() {
   WiFi.softAP("Area27-Sinuca-Config");
 
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-  dnsServer.start(DNS_PORT, "*", apIP);
+  dnsServer.start(53, "*", apIP);
+  Serial.println("[AP] Modo Ponto de Acesso ativado. SSID: Area27-Sinuca-Config");
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  Serial.println("\n[INIT] Inicializando Área27 Sinuca v2.0...");
 
   if (!LittleFS.begin()) {
     LittleFS.format();
@@ -900,23 +992,24 @@ void setup() {
   server.on("/api/v1/backup/import",  HTTP_POST, handleApiImportBackup);
 
   // Standard API Routes
-  server.on("/players",        HTTP_GET,  handleGetPlayers);
-  server.on("/players",        HTTP_POST, handlePostPlayers);
-  server.on("/players/login",  HTTP_POST, handleLoginPlayer);
-  server.on("/players/delete", HTTP_POST, handleDeletePlayer);
-  server.on("/players/clear",  HTTP_POST, handleClearPlayers);
-  server.on("/ranking",        HTTP_GET,  handleGetRanking);
-  server.on("/ranking/reset",  HTTP_POST, handleResetRanking);
-  server.on("/settings/auth",  HTTP_POST, handleSettingsAuth);
-  server.on("/match/create",   HTTP_POST, handleCreateMatch);
-  server.on("/match/join",     HTTP_POST, handleJoinMatch);
-  server.on("/match/respond",  HTTP_POST, handleRespondInvite);
-  server.on("/match/active",   HTTP_GET,  handleGetActiveMatch);
-  server.on("/match/finish",   HTTP_POST, handleFinishMatch);
-  server.on("/match/cancel",   HTTP_POST, handleCancelMatch);
-  server.on("/wifi/scan",      HTTP_GET,  handleWifiScan);
-  server.on("/wifi/save",      HTTP_POST, handleWifiSave);
-  server.on("/wifi/reset",     HTTP_POST, handleWifiReset);
+  server.on("/players",                HTTP_GET,  handleGetPlayers);
+  server.on("/players",                HTTP_POST, handlePostPlayers);
+  server.on("/players/login",          HTTP_POST, handleLoginPlayer);
+  server.on("/players/delete",         HTTP_POST, handleDeletePlayer);
+  server.on("/players/reset-password", HTTP_POST, handleResetPlayerPassword);
+  server.on("/players/clear",          HTTP_POST, handleClearPlayers);
+  server.on("/ranking",                HTTP_GET,  handleGetRanking);
+  server.on("/ranking/reset",          HTTP_POST, handleResetRanking);
+  server.on("/settings/auth",          HTTP_POST, handleSettingsAuth);
+  server.on("/match/create",           HTTP_POST, handleCreateMatch);
+  server.on("/match/join",             HTTP_POST, handleJoinMatch);
+  server.on("/match/respond",          HTTP_POST, handleRespondInvite);
+  server.on("/match/active",           HTTP_GET,  handleGetActiveMatch);
+  server.on("/match/finish",           HTTP_POST, handleFinishMatch);
+  server.on("/match/cancel",           HTTP_POST, handleCancelMatch);
+  server.on("/wifi/scan",              HTTP_GET,  handleWifiScan);
+  server.on("/wifi/save",              HTTP_POST, handleWifiSave);
+  server.on("/wifi/reset",             HTTP_POST, handleWifiReset);
 
   // Captive Portal Redirect & File Reader
   server.onNotFound([]() {
@@ -938,4 +1031,12 @@ void loop() {
     MDNS.update();
   }
   server.handleClient();
+
+  // Cancelamento automático se a partida não for iniciada em 30 minutos (1800000 ms)
+  if (activeMatch.active && activeMatch.status == "waiting") {
+    if (millis() - activeMatch.startMillis >= 1800000UL) {
+      activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0, 0};
+      Serial.println("[MATCH] Partida cancelada automaticamente por tempo limite de 30 minutos sem iniciar.");
+    }
+  }
 }

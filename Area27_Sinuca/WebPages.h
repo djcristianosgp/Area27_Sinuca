@@ -109,6 +109,7 @@ const API = {
   registerPlayer(d) { return this.request('/players', { method: 'POST', body: JSON.stringify(d) }); },
   loginPlayer(d) { return this.request('/players/login', { method: 'POST', body: JSON.stringify(d) }); },
   deletePlayer(id) { return this.request('/players/delete', { method: 'POST', body: JSON.stringify({ id }) }); },
+  resetPlayerPassword(d) { return this.request('/players/reset-password', { method: 'POST', body: JSON.stringify(d) }); },
   clearPlayers() { return this.request('/players/clear', { method: 'POST' }); },
   resetRanking() { return this.request('/ranking/reset', { method: 'POST' }); },
   getRanking() { return this.request('/ranking'); },
@@ -149,9 +150,20 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function selectUser(id, nome, elo) {
-  setCurrentUser({ id, nome, elo });
-  showToast(`Sessão iniciada como ${nome}!`, 'success');
+async function promptLoginForUser(id, nome) {
+  const senha = prompt(`Digite a senha PIN (4 dígitos) para logar como ${nome}:`);
+  if (senha === null) return;
+  if (!senha.trim()) {
+    showToast('Senha não informada.', 'error');
+    return;
+  }
+  try {
+    const res = await API.loginPlayer({ id: Number(id), senha: senha.trim() });
+    if (res && res.player) {
+      setCurrentUser(res.player);
+      showToast(`Bem-vindo, ${res.player.nome}!`, 'success');
+    }
+  } catch (err) {}
 }
 
 async function initPlayersPage() {
@@ -162,10 +174,13 @@ async function initPlayersPage() {
       e.preventDefault();
       const nome = document.getElementById('new-player-name').value.trim();
       const telefone = document.getElementById('new-player-phone').value.trim();
-      if (!nome) return;
+      const senhaEl = document.getElementById('new-player-pass');
+      const senha = senhaEl ? senhaEl.value.trim() : '0000';
+      if (!nome || !senha) return;
       try {
-        await API.registerPlayer({ nome, telefone });
+        const res = await API.registerPlayer({ nome, telefone, senha });
         showToast('Jogador cadastrado com sucesso!', 'success');
+        setCurrentUser({ id: res.id, nome: res.nome, telefone: res.telefone, elo: 1000 });
         form.reset();
         loadList();
       } catch (err) {}
@@ -186,7 +201,7 @@ async function initPlayersPage() {
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <span class="badge-elo">${p.elo || 1000} ELO</span>
-            <button onclick="selectUser(${p.id}, '${escapeHtml(p.nome)}', ${p.elo || 1000})" class="btn btn-secondary" style="height:34px; padding:0 10px; font-size:0.8rem;">Entrar</button>
+            <button onclick="promptLoginForUser(${p.id}, '${escapeHtml(p.nome)}')" class="btn btn-secondary" style="height:34px; padding:0 10px; font-size:0.8rem;">Entrar</button>
           </div>
         </div>
       `).join('');
@@ -356,14 +371,31 @@ async function initTVPage() {
       const liveEl = document.getElementById('tv-live-content');
       if (liveEl) {
         if (data.activeMatch && data.activeMatch.active) {
+          const isWaiting = data.activeMatch.status === 'waiting';
+          const playersList = (data.activeMatch.players || []).map(p => {
+            let statusBadge = '';
+            if (p.invite === 'creator' || p.invite === 'accepted') statusBadge = '✅ Confirmado';
+            else if (p.invite === 'pending') statusBadge = '⏳ Aguardando Aceite';
+            else statusBadge = '👤 Vaga Livre';
+            return `<div style="padding:6px 12px; background:#0f172a; border-radius:6px; margin:4px 0; display:flex; justify-content:space-between; align-items:center; font-size:0.9rem;">
+              <span><strong>${escapeHtml(p.nome)}</strong></span>
+              <span style="font-size:0.8rem; color:${p.invite === 'pending' ? '#fbbf24' : (p.id > 0 ? '#4ade80' : '#94a3b8')};">${statusBadge}</span>
+            </div>`;
+          }).join('');
+
           liveEl.innerHTML = `
             <div style="text-align:center; padding:10px;">
-              <div style="font-size:1.2rem; font-weight:800; color:#38bdf8;">CÓDIGO DA MESA: <span style="background:#0284c7; padding:4px 12px; border-radius:6px; font-family:monospace;">${data.activeMatch.code}</span></div>
-              <div style="margin-top:10px; font-size:1rem; color:#e2e8f0;">Status: <strong>${data.activeMatch.status === 'in_progress' ? 'EM ANDAMENTO 🎱' : 'AGUARDANDO JOGADORES ⏳'}</strong></div>
+              <div style="font-size:1.1rem; font-weight:800; color:#38bdf8;">CÓDIGO DA MESA: <span style="background:#0284c7; color:#fff; padding:4px 14px; border-radius:6px; font-family:monospace; font-size:1.5rem;">${data.activeMatch.code}</span></div>
+              <div style="margin:10px 0; font-size:1rem; color:${isWaiting ? '#fbbf24' : '#4ade80'}; font-weight:700;">
+                ${isWaiting ? '⏳ PARTIDA ABERTA (AGUARDANDO CONFIRMAÇÃO DE JOGADORES)' : '🎱 PARTIDA EM ANDAMENTO'}
+              </div>
+              <div style="max-width:380px; margin:10px auto; text-align:left;">
+                ${playersList}
+              </div>
             </div>
           `;
         } else {
-          liveEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">Nenhuma partida em andamento no momento.<br>Acesse pelo celular para iniciar!</div>';
+          liveEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">Nenhuma partida aberta no momento.<br>Acesse pelo celular para iniciar!</div>';
         }
       }
 
@@ -426,9 +458,16 @@ async function initMatchPage() {
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label">Criador da Mesa</label>
+                <label class="form-label">Criador da Mesa (Jogador 1)</label>
                 <select id="creator-select" class="form-select" required>
                   ${players.map(p => `<option value="${p.id}" ${currentUser && currentUser.id === p.id ? 'selected' : ''}>${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Convidar Adversário (opcional)</label>
+                <select id="opponent-select" class="form-select">
+                  <option value="0">Aguardar entrada por Código da Sala</option>
+                  ${players.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
                 </select>
               </div>
               <button type="submit" class="btn btn-primary">🚀 Abrir Mesa / Gerar Código</button>
@@ -440,8 +479,9 @@ async function initMatchPage() {
           e.preventDefault();
           const matchType = document.getElementById('match-type-select').value;
           const playerA = parseInt(document.getElementById('creator-select').value);
+          const playerB = parseInt(document.getElementById('opponent-select').value);
           try {
-            await API.createMatch({ matchType, playerA });
+            await API.createMatch({ matchType, playerA, playerB });
             showToast('Mesa criada com sucesso!', 'success');
             renderMatchScreen();
           } catch (err) {}
@@ -449,14 +489,40 @@ async function initMatchPage() {
 
       } else {
         const isWaiting = match.status === 'waiting';
+        const mySlot = (match.players || []).find(p => currentUser && p.id === currentUser.id);
+        const isMyInvitePending = mySlot && mySlot.invite === 'pending';
+
+        const playersStatusHtml = (match.players || []).map(p => {
+          let stStr = '';
+          if (p.invite === 'creator' || p.invite === 'accepted') stStr = '✅ Confirmado';
+          else if (p.invite === 'pending') stStr = '⏳ Convite Pendente';
+          else stStr = '👤 Vaga Livre';
+          return `<div style="padding:6px 10px; background:#161616; border-radius:6px; margin:4px 0; display:flex; justify-content:space-between; align-items:center; font-size:0.85rem;">
+            <span>${escapeHtml(p.nome)}</span>
+            <span style="color:${p.invite === 'pending' ? 'var(--gold)' : (p.id > 0 ? '#4ade80' : 'var(--text-muted)')};">${stStr}</span>
+          </div>`;
+        }).join('');
+
         arena.innerHTML = `
           <div class="card" style="text-align:center; margin-bottom:16px;">
-            <div style="font-size:0.85rem; color:var(--text-muted);">CÓDIGO DE ENTRADA</div>
+            <div style="font-size:0.85rem; color:var(--text-muted);">CÓDIGO DE ENTRADA NA MESA</div>
             <div style="font-size:2.5rem; font-weight:800; letter-spacing:4px; color:var(--gold); margin:8px 0;">${match.code}</div>
-            <div style="font-size:0.9rem; color:var(--primary); font-weight:600;">Status: ${isWaiting ? 'Aguardando Jogadores Entrarem' : 'Em Andamento 🎱'}</div>
+            <div style="font-size:0.9rem; color:${isWaiting ? 'var(--gold)' : 'var(--primary)'}; font-weight:600;">Status: ${isWaiting ? 'Aguardando Aceite / Jogadores ⏳' : 'Em Andamento 🎱'}</div>
+            <div style="margin-top:10px; text-align:left;">${playersStatusHtml}</div>
           </div>
 
-          ${isWaiting ? `
+          ${isMyInvitePending ? `
+            <div class="card" style="border: 2px solid var(--gold); background: rgba(255,215,0,0.1); text-align:center; margin-bottom:16px;">
+              <h3 style="color:var(--gold); margin-bottom:8px;">📩 Convite de Partida</h3>
+              <p style="font-size:0.9rem; margin-bottom:12px;">Você foi convidado para a partida <strong>${match.code}</strong>. Aceita participar?</p>
+              <div style="display:flex; gap:10px; justify-content:center;">
+                <button id="btn-accept-invite" class="btn btn-primary" style="height:38px; padding:0 14px; font-size:0.85rem;">✅ Aceitar</button>
+                <button id="btn-refuse-invite" class="btn btn-danger" style="height:38px; padding:0 14px; font-size:0.85rem;">❌ Recusar</button>
+              </div>
+            </div>
+          ` : ''}
+
+          ${isWaiting && !isMyInvitePending ? `
             <div class="card" style="margin-bottom:16px;">
               <h3 style="font-size:1rem; margin-bottom:10px;">👥 Entrar na Mesa</h3>
               <form id="form-join-match">
@@ -478,7 +544,7 @@ async function initMatchPage() {
                 <label class="form-label">Quem Venceu?</label>
                 <select id="winner-select" class="form-select" required>
                   <option value="">Selecione o Vencedor</option>
-                  ${players.map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('')}
+                  ${(match.players || []).filter(p => p.id > 0).map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('')}
                 </select>
               </div>
               <div class="form-group">
@@ -494,7 +560,24 @@ async function initMatchPage() {
           </div>
         `;
 
-        if (isWaiting) {
+        if (isMyInvitePending) {
+          document.getElementById('btn-accept-invite').addEventListener('click', async () => {
+            try {
+              await API.respondMatchInvite({ player: currentUser.id, accept: true });
+              showToast('Convite aceito com sucesso!', 'success');
+              renderMatchScreen();
+            } catch (err) {}
+          });
+          document.getElementById('btn-refuse-invite').addEventListener('click', async () => {
+            try {
+              await API.respondMatchInvite({ player: currentUser.id, accept: false });
+              showToast('Convite recusado.', 'success');
+              renderMatchScreen();
+            } catch (err) {}
+          });
+        }
+
+        if (isWaiting && !isMyInvitePending) {
           document.getElementById('form-join-match').addEventListener('submit', async (e) => {
             e.preventDefault();
             const player = parseInt(document.getElementById('join-player-select').value);
@@ -596,6 +679,51 @@ function initSettingsPage() {
     });
   }
 
+  const selectManage = document.getElementById('select-manage-player');
+  async function loadManagePlayersSelect() {
+    if (!selectManage) return;
+    try {
+      const players = await API.getPlayers();
+      if (!players || players.length === 0) {
+        selectManage.innerHTML = '<option value="">Nenhum jogador cadastrado</option>';
+        return;
+      }
+      selectManage.innerHTML = '<option value="">Selecione um jogador...</option>' +
+        players.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('');
+    } catch (err) {}
+  }
+  loadManagePlayersSelect();
+
+  const btnResetPass = document.getElementById('btn-reset-player-pass');
+  if (btnResetPass) {
+    btnResetPass.addEventListener('click', async () => {
+      const playerId = selectManage ? parseInt(selectManage.value) : 0;
+      if (!playerId) { showToast('Selecione um jogador!', 'error'); return; }
+      const newPass = prompt('Digite a nova senha PIN (4 dígitos) ou clique em OK para resetar para 0000:', '0000');
+      if (newPass === null) return;
+      try {
+        await API.resetPlayerPassword({ id: playerId, senha: newPass.trim() || '0000' });
+        showToast('Senha do jogador resetada com sucesso!', 'success');
+      } catch (err) {}
+    });
+  }
+
+  const btnDeleteSingle = document.getElementById('btn-delete-single-player');
+  if (btnDeleteSingle) {
+    btnDeleteSingle.addEventListener('click', async () => {
+      const playerId = selectManage ? parseInt(selectManage.value) : 0;
+      if (!playerId) { showToast('Selecione um jogador!', 'error'); return; }
+      const selectedName = selectManage.options[selectManage.selectedIndex].text;
+      if (confirm(`Tem certeza que deseja excluir o jogador "${selectedName}"? Esta ação não pode ser desfeita.`)) {
+        try {
+          await API.deletePlayer(playerId);
+          showToast('Jogador excluído com sucesso!', 'success');
+          loadManagePlayersSelect();
+        } catch (err) {}
+      }
+    });
+  }
+
   const btnClearPlayers = document.getElementById('btn-clear-players');
   if (btnClearPlayers) {
     btnClearPlayers.addEventListener('click', async () => {
@@ -603,6 +731,7 @@ function initSettingsPage() {
         try {
           await API.clearPlayers();
           showToast('Todos os jogadores foram excluídos.', 'success');
+          loadManagePlayersSelect();
         } catch (err) {}
       }
     });
@@ -707,6 +836,7 @@ const char HTML_PLAYERS[] PROGMEM = R"rawliteral(
         <form id="form-add-player" style="display:flex; flex-direction:column; gap:10px;">
           <input type="text" id="new-player-name" class="form-input" placeholder="Nome do Jogador" required>
           <input type="tel" id="new-player-phone" class="form-input" placeholder="Telefone (opcional)">
+          <input type="password" id="new-player-pass" class="form-input" placeholder="Senha PIN (4 dígitos)" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
           <button type="submit" class="btn btn-primary" style="height:44px;">Cadastrar Jogador</button>
         </form>
       </div>
@@ -801,6 +931,19 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
       </div>
       <div id="settings-content" class="hidden">
         <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 10px; color: var(--primary);">👤 Gerenciar Jogador Individual</h2>
+          <div class="form-group">
+            <label class="form-label">Selecione o Jogador</label>
+            <select id="select-manage-player" class="form-select">
+              <option value="">Carregando jogadores...</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+            <button type="button" id="btn-reset-player-pass" class="btn btn-secondary" style="flex:1; height:44px; font-size:0.85rem;">🔑 Resetar Senha</button>
+            <button type="button" id="btn-delete-single-player" class="btn btn-danger" style="flex:1; height:44px; font-size:0.85rem;">🗑️ Excluir Jogador</button>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--primary);">💾 Backup do Sistema</h2>
           <button id="btn-export-backup" class="btn btn-primary">📥 Exportar Dados (backup.json)</button>
         </div>
@@ -813,7 +956,7 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
           <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
         </div>
         <div class="card" style="margin-bottom: 16px;">
-          <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Gerenciar Jogadores</h2>
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Excluir Todos os Jogadores</h2>
           <button id="btn-clear-players" class="btn btn-danger">Excluir Todos os Jogadores</button>
         </div>
       </div>

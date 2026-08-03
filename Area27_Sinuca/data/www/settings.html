@@ -35,8 +35,26 @@
         </form>
       </div>
 
-      <!-- Settings Content (Protected by PIN 0000) -->
+      <!-- Settings Content (Protected by PIN) -->
       <div id="settings-content" class="hidden">
+
+        <!-- Config 0: Gerenciar Jogador Individual -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--primary);">👤 Gerenciar Jogador Individual</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+            Exclua um jogador específico ou resete a senha PIN dele para o padrão (0000).
+          </p>
+          <div class="form-group">
+            <label class="form-label" for="select-manage-player">Selecione o Jogador</label>
+            <select id="select-manage-player" class="form-select">
+              <option value="">Carregando jogadores...</option>
+            </select>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+            <button type="button" id="btn-reset-player-pass" class="btn btn-secondary" style="flex: 1; height: 44px; font-size: 0.85rem;">🔑 Resetar Senha</button>
+            <button type="button" id="btn-delete-single-player" class="btn btn-danger" style="flex: 1; height: 44px; font-size: 0.85rem;">🗑️ Excluir Jogador</button>
+          </div>
+        </div>
 
         <!-- Config 1: Backup Export & Import -->
         <div class="card" style="margin-bottom: 16px;">

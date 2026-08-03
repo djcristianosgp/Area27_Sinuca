@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Configurações - Área27 Sinuca</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <div class="app-container">
@@ -28,7 +30,9 @@
         <form id="form-admin-pin">
           <div class="form-group">
             <label class="form-label" for="admin-pin-input">PIN de Administrador (4 dígitos)</label>
-            <input type="password" id="admin-pin-input" class="form-input" placeholder="0000" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" style="text-align: center; font-size: 1.5rem; letter-spacing: 6px;" required>
+            <input type="password" id="admin-pin-input" class="form-input" placeholder="0000" maxlength="4"
+              pattern="[0-9]{4}" inputmode="numeric" style="text-align: center; font-size: 1.5rem; letter-spacing: 6px;"
+              required>
           </div>
 
           <button type="submit" class="btn btn-primary">🔓 Acessar Configurações</button>
@@ -51,8 +55,10 @@
             </select>
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
-            <button type="button" id="btn-reset-player-pass" class="btn btn-secondary" style="flex: 1; height: 44px; font-size: 0.85rem;">🔑 Resetar Senha</button>
-            <button type="button" id="btn-delete-single-player" class="btn btn-danger" style="flex: 1; height: 44px; font-size: 0.85rem;">🗑️ Excluir Jogador</button>
+            <button type="button" id="btn-reset-player-pass" class="btn btn-secondary"
+              style="flex: 1; height: 44px; font-size: 0.85rem;">🔑 Resetar Senha</button>
+            <button type="button" id="btn-delete-single-player" class="btn btn-danger"
+              style="flex: 1; height: 44px; font-size: 0.85rem;">🗑️ Excluir Jogador</button>
           </div>
         </div>
 
@@ -63,7 +69,8 @@
             Exporte ou restaure o arquivo de dados completo (backup.json) contendo jogadores, estatísticas e histórico.
           </p>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button id="btn-export-backup" class="btn btn-primary" style="flex: 1;">📥 Exportar Dados (backup.json)</button>
+            <button id="btn-export-backup" class="btn btn-primary" style="flex: 1;">📥 Exportar Dados
+              (backup.json)</button>
             <label class="btn btn-secondary" style="flex: 1; text-align: center; cursor: pointer; margin: 0;">
               📤 Importar Dados
               <input type="file" id="file-import-backup" accept=".json" style="display: none;">
@@ -75,9 +82,11 @@
         <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--gold);">👑 Encerrar Temporada Mensal</h2>
           <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
-            Salva os campeões no Hall da Fama e reinicia os ELOs dos jogadores para 1000, preservando todo o histórico de partidas.
+            Salva os campeões no Hall da Fama e reinicia os ELOs dos jogadores para 1000, preservando todo o histórico
+            de partidas.
           </p>
-          <button id="btn-reset-season" class="btn btn-secondary" style="background: #a855f7;">🏆 Encerrar Temporada e Coroar Campeões</button>
+          <button id="btn-reset-season" class="btn btn-secondary" style="background: #a855f7;">🏆 Encerrar Temporada e
+            Coroar Campeões</button>
         </div>
 
         <!-- Config 3: Wi-Fi -->
@@ -95,22 +104,30 @@
           <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
             Reseta todas as estatísticas (vitórias, derrotas e ELO para 1000), mantendo o cadastro dos jogadores.
           </p>
-          <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
+          <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do
+            Ranking</button>
         </div>
 
         <!-- Config 4.5: Atualização GitHub -->
         <div class="card" style="margin-bottom: 16px;">
-          <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--primary);">☁️ Atualização do Sistema (GitHub)</h2>
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--primary);">☁️ Atualização do Sistema (GitHub)
+          </h2>
           <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
-            Verifique e instale automaticamente novas versões do firmware diretamente do repositório GitHub sem cabo USB.
+            Verifique e instale automaticamente novas versões do firmware diretamente do repositório GitHub sem cabo
+            USB.
           </p>
-          <div id="update-info-container" style="background: #1e293b; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;">
-            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.0</strong></div>
-            <div id="update-status-text" style="color: var(--text-muted); margin-top: 4px;">Clique no botão abaixo para verificar se há atualizações na nuvem.</div>
+          <div id="update-info-container"
+            style="background: #1e293b; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;">
+            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.0</strong>
+            </div>
+            <div id="update-status-text" style="color: var(--text-muted); margin-top: 4px;">Clique no botão abaixo para
+              verificar se há atualizações na nuvem.</div>
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button type="button" id="btn-check-update" class="btn btn-secondary" style="flex: 1;">🔍 Verificar Atualização</button>
-            <button type="button" id="btn-start-update" class="btn btn-primary hidden" style="flex: 1; background: var(--success-color);">🚀 Atualizar Agora (GitHub)</button>
+            <button type="button" id="btn-check-update" class="btn btn-secondary" style="flex: 1;">🔍 Verificar
+              Atualização</button>
+            <button type="button" id="btn-start-update" class="btn btn-primary hidden"
+              style="flex: 1; background: var(--success-color);">🚀 Atualizar Agora (GitHub)</button>
           </div>
         </div>
 
@@ -127,10 +144,11 @@
     </main>
 
     <footer class="footer">
-      Área27 Sinuca &bull; ESP8266 Edition v2.0.1
+      Área27 Sinuca &bull; ESP8266 Edition v2.0.2
     </footer>
   </div>
 
   <script src="app.js"></script>
 </body>
+
 </html>

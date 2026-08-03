@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -12,6 +13,7 @@
       overflow-x: auto;
       padding-bottom: 12px;
     }
+
     .bracket-column {
       flex: 1;
       min-width: 160px;
@@ -20,6 +22,7 @@
       justify-content: space-around;
       gap: 12px;
     }
+
     .bracket-title {
       font-size: 0.85rem;
       font-weight: 700;
@@ -28,6 +31,7 @@
       margin-bottom: 8px;
       text-transform: uppercase;
     }
+
     .bracket-match {
       background: var(--card-bg);
       border: 1px solid var(--border-color);
@@ -35,10 +39,12 @@
       padding: 8px;
       position: relative;
     }
+
     .bracket-match.active {
       border-color: var(--gold);
-      box-shadow: 0 0 10px rgba(255,215,0,0.2);
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
     }
+
     .bracket-slot {
       padding: 6px 8px;
       font-size: 0.85rem;
@@ -48,6 +54,7 @@
       align-items: center;
       cursor: pointer;
     }
+
     .bracket-slot.winner {
       background: rgba(46, 125, 50, 0.25);
       color: #4ade80;
@@ -55,6 +62,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <div class="app-container">
@@ -83,13 +91,16 @@
           <div class="form-group">
             <label class="form-label">Número de Jogadores</label>
             <div style="display: flex; gap: 10px;">
-              <label style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
+              <label
+                style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
                 <input type="radio" name="champ-size" value="4" checked> 4 Jogadores
               </label>
-              <label style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
+              <label
+                style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
                 <input type="radio" name="champ-size" value="8"> 8 Jogadores
               </label>
-              <label style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
+              <label
+                style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
                 <input type="radio" name="champ-size" value="16"> 16 Jogadores
               </label>
             </div>
@@ -103,7 +114,9 @@
       <div id="champ-active-card" class="card hidden" style="margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <h2 id="active-champ-title" style="font-size: 1.2rem; color: var(--gold);">Nome do Torneio</h2>
-          <button id="btn-reset-champ" class="btn btn-secondary" style="width: auto; padding: 4px 12px; font-size: 0.8rem; background: var(--error-color);">Cancelar Torneio</button>
+          <button id="btn-reset-champ" class="btn btn-secondary"
+            style="width: auto; padding: 4px 12px; font-size: 0.8rem; background: var(--error-color);">Cancelar
+            Torneio</button>
         </div>
 
         <div class="bracket-container" id="bracket-view">
@@ -113,7 +126,7 @@
     </main>
 
     <footer class="footer">
-      Área27 Sinuca &bull; ESP8266 Edition v2.0.1
+      Área27 Sinuca &bull; ESP8266 Edition v2.0.2
     </footer>
   </div>
 
@@ -126,4 +139,5 @@
     });
   </script>
 </body>
+
 </html>

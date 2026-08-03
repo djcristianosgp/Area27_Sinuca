@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Modo Partida - Área27 Sinuca</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <div class="app-container">
@@ -44,7 +46,8 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="guard-senha">Senha PIN (4 dígitos numéricos) *</label>
-            <input type="password" id="guard-senha" class="form-input" placeholder="Ex: 1234" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
+            <input type="password" id="guard-senha" class="form-input" placeholder="Ex: 1234" maxlength="4"
+              pattern="[0-9]{4}" inputmode="numeric" required>
           </div>
           <button type="submit" class="btn btn-primary">Cadastrar e Continuar</button>
         </form>
@@ -62,7 +65,8 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="guard-login-senha">Senha PIN (4 dígitos numéricos) *</label>
-            <input type="password" id="guard-login-senha" class="form-input" placeholder="****" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
+            <input type="password" id="guard-login-senha" class="form-input" placeholder="****" maxlength="4"
+              pattern="[0-9]{4}" inputmode="numeric" required>
           </div>
           <button type="submit" class="btn btn-secondary">Entrar na Conta</button>
         </form>
@@ -72,22 +76,26 @@
       <div id="match-arena" class="hidden">
 
         <!-- Invite Notification Banner (Displayed when current logged in user has a pending invite) -->
-        <div id="invite-pending-card" class="card hidden" style="margin-bottom: 20px; border-color: var(--gold); background: linear-gradient(135deg, #2A2410, #1E1E1E);">
+        <div id="invite-pending-card" class="card hidden"
+          style="margin-bottom: 20px; border-color: var(--gold); background: linear-gradient(135deg, #2A2410, #1E1E1E);">
           <h3 style="color: var(--gold); font-size: 1.1rem; margin-bottom: 8px;">📩 Convite de Partida Recebido!</h3>
           <p id="invite-banner-text" style="font-size: 0.9rem; color: var(--text-main); margin-bottom: 16px;">
             Você foi convidado para entrar em uma partida!
           </p>
           <div style="display: flex; gap: 10px;">
             <button class="btn btn-primary" onclick="respondInvite(true)">✅ Aceitar Convite</button>
-            <button class="btn btn-outline" style="border-color: var(--error-color); color: var(--error-color);" onclick="respondInvite(false)">❌ Recusar Convite</button>
+            <button class="btn btn-outline" style="border-color: var(--error-color); color: var(--error-color);"
+              onclick="respondInvite(false)">❌ Recusar Convite</button>
           </div>
         </div>
-        
+
         <!-- Active Match Panel (Displayed when a match is active) -->
         <div id="active-match-panel" class="card hidden" style="margin-bottom: 20px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <span id="active-match-type-badge" class="badge-elo" style="font-size: 0.85rem;">PAR OU ÍMPAR (2P)</span>
-            <button onclick="cancelCurrentMatch()" style="background: none; border: none; color: var(--error-color); cursor: pointer; font-size: 0.85rem; font-weight: 600;">✖ Cancelar</button>
+            <button onclick="cancelCurrentMatch()"
+              style="background: none; border: none; color: var(--error-color); cursor: pointer; font-size: 0.85rem; font-weight: 600;">✖
+              Cancelar</button>
           </div>
 
           <!-- Room Code Box -->
@@ -105,7 +113,8 @@
           </div>
 
           <!-- Match Action Controls -->
-          <div id="match-status-msg" style="text-align: center; font-size: 0.9rem; color: var(--gold); margin-bottom: 14px;">
+          <div id="match-status-msg"
+            style="text-align: center; font-size: 0.9rem; color: var(--gold); margin-bottom: 14px;">
             ⏳ Aguardando jogadores aceitarem os convites...
           </div>
 
@@ -113,7 +122,8 @@
             <button id="btn-open-finish-modal" class="btn btn-primary" onclick="openFinishModal()" disabled>
               🏆 Finalizar Partida
             </button>
-            <button id="btn-cancel-match" class="btn btn-outline" style="border-color: var(--error-color); color: var(--error-color);" onclick="cancelCurrentMatch()">
+            <button id="btn-cancel-match" class="btn btn-outline"
+              style="border-color: var(--error-color); color: var(--error-color);" onclick="cancelCurrentMatch()">
               🚫 Cancelar Partida
             </button>
           </div>
@@ -122,7 +132,8 @@
         <!-- Create or Join Lobby Cards (Displayed when no match is active) -->
         <div id="match-lobby">
           <div class="tabs-nav">
-            <button id="tab-btn-create-match" class="tab-btn active" onclick="switchMatchTab('create')">Criar Partida</button>
+            <button id="tab-btn-create-match" class="tab-btn active" onclick="switchMatchTab('create')">Criar
+              Partida</button>
             <button id="tab-btn-join-match" class="tab-btn" onclick="switchMatchTab('join')">Entrar por Código</button>
           </div>
 
@@ -130,7 +141,7 @@
           <div id="card-create-match" class="card">
             <h2 style="font-size: 1.1rem; margin-bottom: 14px;">➕ Criar Nova Partida</h2>
             <form id="form-create-match">
-              
+
               <!-- Select Match Type -->
               <div class="form-group">
                 <label class="form-label" for="match-type-select">Tipo de Partida *</label>
@@ -144,7 +155,8 @@
               <!-- Creator Slot -->
               <div class="form-group">
                 <label class="form-label">Criador (Você)</label>
-                <div id="current-player-name-display" class="form-input" style="display: flex; align-items: center; color: var(--gold); font-weight: 700;">
+                <div id="current-player-name-display" class="form-input"
+                  style="display: flex; align-items: center; color: var(--gold); font-weight: 700;">
                   Carregando perfil...
                 </div>
               </div>
@@ -164,7 +176,9 @@
             <form id="form-join-match">
               <div class="form-group">
                 <label class="form-label" for="input-join-code">Código da Partida (4 Caracteres) *</label>
-                <input type="text" id="input-join-code" class="form-input" placeholder="Ex: A7K9" maxlength="4" style="text-transform: uppercase; font-size: 1.4rem; letter-spacing: 4px; font-weight: 700; text-align: center;" required>
+                <input type="text" id="input-join-code" class="form-input" placeholder="Ex: A7K9" maxlength="4"
+                  style="text-transform: uppercase; font-size: 1.4rem; letter-spacing: 4px; font-weight: 700; text-align: center;"
+                  required>
               </div>
 
               <button type="submit" class="btn btn-secondary">🤝 Entrar na Partida</button>
@@ -176,7 +190,8 @@
 
       <!-- Finalize Match Modal Card -->
       <div id="modal-finish-match" class="card hidden" style="margin-top: 20px; border-color: var(--primary);">
-        <h2 style="font-size: 1.2rem; margin-bottom: 14px; text-align: center; color: var(--gold);">🏁 Finalizar Partida</h2>
+        <h2 style="font-size: 1.2rem; margin-bottom: 14px; text-align: center; color: var(--gold);">🏁 Finalizar Partida
+        </h2>
 
         <form id="form-finish-match">
           <div class="form-group">
@@ -211,10 +226,11 @@
     </main>
 
     <footer class="footer">
-      Área27 Sinuca &bull; ESP8266 Edition v2.0.1
+      Área27 Sinuca &bull; ESP8266 Edition v2.0.2
     </footer>
   </div>
 
   <script src="app.js"></script>
 </body>
+
 </html>

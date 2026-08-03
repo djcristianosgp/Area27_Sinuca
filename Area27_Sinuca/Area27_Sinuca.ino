@@ -19,7 +19,7 @@
 #include <LittleFS.h>
 #include "WebPages.h"
 
-const char* CURRENT_VERSION = "2.0.1";
+const char* CURRENT_VERSION = "2.0.2";
 const char* GITHUB_VERSION_URL = "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/version.json";
 
 // DNS Server for Captive Portal
@@ -638,20 +638,34 @@ void handleCheckUpdate() {
   client.setTimeout(10000);
 
   HTTPClient http;
-  if (!http.begin(client, GITHUB_VERSION_URL)) {
-    server.send(500, "application/json", "{\"error\":\"Falha ao conectar ao GitHub.\"}");
-    return;
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  
+  String urlsToTry[4] = {
+    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/Area27_Sinuca/version.json",
+    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/version.json",
+    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/master/Area27_Sinuca/version.json",
+    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/master/version.json"
+  };
+
+  int httpCode = 0;
+  String payload = "";
+
+  for (int i = 0; i < 4; i++) {
+    if (http.begin(client, urlsToTry[i])) {
+      httpCode = http.GET();
+      if (httpCode == HTTP_CODE_OK) {
+        payload = http.getString();
+        http.end();
+        break;
+      }
+      http.end();
+    }
   }
 
-  int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK) {
-    server.send(500, "application/json", "{\"error\":\"GitHub retornou HTTP " + String(httpCode) + "\"}");
-    http.end();
+    server.send(500, "application/json", "{\"error\":\"O arquivo version.json ainda não está disponível publicamente no GitHub (HTTP " + String(httpCode) + "). Realize o commit e push de version.json para a branch main.\"}");
     return;
   }
-
-  String payload = http.getString();
-  http.end();
 
   String latestVersion = CURRENT_VERSION;
   String firmwareUrl = "";
@@ -719,6 +733,7 @@ void handleStartUpdate() {
 
   WiFiClientSecure client;
   client.setInsecure();
+  ESPhttpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   
   t_httpUpdate_return ret = ESPhttpUpdate.update(client, binUrl);
 

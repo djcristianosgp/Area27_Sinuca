@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Modo Campeonato - Área27 Sinuca</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .bracket-container {
+      display: flex;
+      gap: 16px;
+      overflow-x: auto;
+      padding-bottom: 12px;
+    }
+    .bracket-column {
+      flex: 1;
+      min-width: 160px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      gap: 12px;
+    }
+    .bracket-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--primary);
+      text-align: center;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .bracket-match {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      position: relative;
+    }
+    .bracket-match.active {
+      border-color: var(--gold);
+      box-shadow: 0 0 10px rgba(255,215,0,0.2);
+    }
+    .bracket-slot {
+      padding: 6px 8px;
+      font-size: 0.85rem;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+    .bracket-slot.winner {
+      background: rgba(46, 125, 50, 0.25);
+      color: #4ade80;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <header class="header">
+      <div class="header-title">
+        <div class="logo-badge">🏆</div>
+        <h1>Modo Campeonato</h1>
+      </div>
+      <a href="index.html" class="back-btn">← Voltar</a>
+    </header>
+
+    <main>
+      <!-- Setup Championship Card -->
+      <div id="champ-setup-card" class="card" style="margin-bottom: 20px;">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--gold);">🎯 Criar Novo Campeonato</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+          Sorteio automático e chaveamento no ESP8266 (Sem necessidade de internet).
+        </p>
+
+        <form id="form-create-champ">
+          <div class="form-group">
+            <label class="form-label" for="champ-name">Nome do Campeonato</label>
+            <input type="text" id="champ-name" class="form-input" placeholder="Ex: Torneio de Sexta" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Número de Jogadores</label>
+            <div style="display: flex; gap: 10px;">
+              <label style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
+                <input type="radio" name="champ-size" value="4" checked> 4 Jogadores
+              </label>
+              <label style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
+                <input type="radio" name="champ-size" value="8"> 8 Jogadores
+              </label>
+              <label style="flex:1; background: var(--border-color); padding: 10px; border-radius: var(--radius-sm); text-align: center; cursor: pointer;">
+                <input type="radio" name="champ-size" value="16"> 16 Jogadores
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary">🎲 Realizar Sorteio e Gerar Chaveamento</button>
+        </form>
+      </div>
+
+      <!-- Active Championship Tree -->
+      <div id="champ-active-card" class="card hidden" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h2 id="active-champ-title" style="font-size: 1.2rem; color: var(--gold);">Nome do Torneio</h2>
+          <button id="btn-reset-champ" class="btn btn-secondary" style="width: auto; padding: 4px 12px; font-size: 0.8rem; background: var(--error-color);">Cancelar Torneio</button>
+        </div>
+
+        <div class="bracket-container" id="bracket-view">
+          <!-- Dynamically populated knockout bracket -->
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      Área27 Sinuca &bull; ESP8266 Edition
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof initChampionship === 'function') {
+        initChampionship();
+      }
+    });
+  </script>
+</body>
+</html>

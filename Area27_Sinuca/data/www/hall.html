@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Hall da Fama - Área27 Sinuca</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <header class="header">
+      <div class="header-title">
+        <div class="logo-badge">🏛️</div>
+        <h1>Hall da Fama</h1>
+      </div>
+      <a href="index.html" class="back-btn">← Voltar</a>
+    </header>
+
+    <main>
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="font-size: 1.2rem; color: var(--gold);">👑 Recordes Históricos da Área27</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Os maiores feitos e recordistas de todos os tempos.</p>
+      </div>
+
+      <!-- Hall Categories Grid -->
+      <div class="card-grid" style="grid-template-columns: 1fr; gap: 16px; margin-bottom: 20px;">
+        <!-- Highest ELO -->
+        <div class="card" style="border-left: 5px solid var(--gold);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 2rem;">⚡</div>
+            <div style="flex: 1;">
+              <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Maior ELO de Todos os Tempos</div>
+              <div id="hall-peak-elo" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Longest Win Streak -->
+        <div class="card" style="border-left: 5px solid #ef4444;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 2rem;">🔥</div>
+            <div style="flex: 1;">
+              <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Maior Sequência de Vitórias</div>
+              <div id="hall-max-streak" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Most Victories -->
+        <div class="card" style="border-left: 5px solid #4ade80;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 2rem;">🎯</div>
+            <div style="flex: 1;">
+              <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Mais Vitórias Registradas</div>
+              <div id="hall-most-wins" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Most Matches Played -->
+        <div class="card" style="border-left: 5px solid #3b82f6;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 2rem;">🎱</div>
+            <div style="flex: 1;">
+              <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Mais Partidas Disputadas</div>
+              <div id="hall-most-matches" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Most Season Titles -->
+        <div class="card" style="border-left: 5px solid #a855f7;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 2rem;">👑</div>
+            <div style="flex: 1;">
+              <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Mais Títulos de Temporada</div>
+              <div id="hall-most-titles" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">Carregando...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Past Seasons Champions Section -->
+      <div class="card">
+        <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--gold);">🏆 Galeria de Campeões por Temporada</h3>
+        <div id="seasons-gallery-list">
+          <div style="text-align: center; color: var(--text-muted); padding: 14px; font-size: 0.85rem;">
+            Nenhuma temporada anterior finalizada ainda.
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      Área27 Sinuca &bull; ESP8266 Edition
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof initHallOfFame === 'function') {
+        initHallOfFame();
+      }
+    });
+  </script>
+</body>
+</html>

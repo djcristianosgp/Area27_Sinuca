@@ -37,7 +37,32 @@
 
       <!-- Settings Content (Protected by PIN 0000) -->
       <div id="settings-content" class="hidden">
-        <!-- Config 1: Wi-Fi -->
+
+        <!-- Config 1: Backup Export & Import -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--primary);">💾 Backup do Sistema</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+            Exporte ou restaure o arquivo de dados completo (backup.json) contendo jogadores, estatísticas e histórico.
+          </p>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button id="btn-export-backup" class="btn btn-primary" style="flex: 1;">📥 Exportar Dados (backup.json)</button>
+            <label class="btn btn-secondary" style="flex: 1; text-align: center; cursor: pointer; margin: 0;">
+              📤 Importar Dados
+              <input type="file" id="file-import-backup" accept=".json" style="display: none;">
+            </label>
+          </div>
+        </div>
+
+        <!-- Config 2: Gestão de Temporadas -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--gold);">👑 Encerrar Temporada Mensal</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+            Salva os campeões no Hall da Fama e reinicia os ELOs dos jogadores para 1000, preservando todo o histórico de partidas.
+          </p>
+          <button id="btn-reset-season" class="btn btn-secondary" style="background: #a855f7;">🏆 Encerrar Temporada e Coroar Campeões</button>
+        </div>
+
+        <!-- Config 3: Wi-Fi -->
         <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px;">📶 Rede Wi-Fi</h2>
           <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
@@ -46,7 +71,7 @@
           <button id="btn-reset-wifi" class="btn btn-secondary">Trocar de Rede Wi-Fi</button>
         </div>
 
-        <!-- Config 2: Zerar Ranking -->
+        <!-- Config 4: Zerar Ranking -->
         <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🏆 Zerar Ranking</h2>
           <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
@@ -55,7 +80,7 @@
           <button id="btn-reset-ranking" class="btn btn-secondary" style="background: #e65100;">Zerar Estatísticas do Ranking</button>
         </div>
 
-        <!-- Config 3: Excluir Jogadores -->
+        <!-- Config 5: Excluir Jogadores -->
         <div class="card" style="margin-bottom: 16px;">
           <h2 style="font-size: 1.1rem; margin-bottom: 8px;">🗑️ Gerenciar Jogadores</h2>
           <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
@@ -63,6 +88,7 @@
           </p>
           <button id="btn-clear-players" class="btn btn-danger">Excluir Todos os Jogadores</button>
         </div>
+
       </div>
     </main>
 

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TV Dashboard - Área27 Sinuca</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body.tv-mode {
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      padding: 0;
+      margin: 0;
+      overflow-x: hidden;
+    }
+    .tv-container {
+      max-width: 100%;
+      min-height: 100vh;
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .tv-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      padding: 16px 28px;
+      border-radius: 16px;
+      border: 1px solid #334155;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    .tv-logo {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .tv-logo-icon {
+      font-size: 2.4rem;
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    }
+    .tv-logo-text h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      margin: 0;
+    }
+    .tv-logo-text p {
+      font-size: 0.95rem;
+      color: #94a3b8;
+      margin: 0;
+    }
+    .tv-clock {
+      font-size: 1.8rem;
+      font-weight: 700;
+      font-family: monospace;
+      color: #38bdf8;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 8px 20px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+    }
+    .tv-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 24px;
+      flex: 1;
+    }
+    .tv-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+    }
+    .tv-card-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      border-bottom: 2px solid #334155;
+      padding-bottom: 10px;
+    }
+    .tv-live-match {
+      background: linear-gradient(135deg, #1e1b4b, #0f172a);
+      border: 2px solid #6366f1;
+      position: relative;
+      overflow: hidden;
+    }
+    .tv-live-match::before {
+      content: '● AO VIVO';
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: #ef4444;
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 20px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+    .tv-match-timer {
+      font-size: 2.2rem;
+      font-weight: 900;
+      text-align: center;
+      color: #4ade80;
+      margin: 10px 0;
+      font-family: monospace;
+    }
+    .tv-players-versus {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      margin: 20px 0;
+      gap: 12px;
+    }
+    .tv-player-box {
+      text-align: center;
+      flex: 1;
+      background: rgba(30, 41, 59, 0.7);
+      padding: 16px;
+      border-radius: 14px;
+      border: 1px solid #475569;
+    }
+    .tv-player-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .tv-player-elo {
+      font-size: 1.05rem;
+      color: #fbbf24;
+      font-weight: 600;
+    }
+    .tv-vs {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: #ef4444;
+      font-style: italic;
+    }
+    .tv-ranking-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .tv-ranking-table th {
+      text-align: left;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      padding: 8px 12px;
+      border-bottom: 1px solid #334155;
+    }
+    .tv-ranking-table td {
+      padding: 12px;
+      font-size: 1.15rem;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    }
+    .tv-rank-pos {
+      font-weight: 800;
+      width: 40px;
+    }
+    .tv-rank-1 { color: #fbbf24; }
+    .tv-rank-2 { color: #94a3b8; }
+    .tv-rank-3 { color: #d97706; }
+    .tv-history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      border-left: 4px solid #3b82f6;
+    }
+    .tv-history-winner {
+      font-weight: 700;
+      color: #4ade80;
+    }
+    .tv-history-score {
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body class="tv-mode">
+  <div class="tv-container">
+    <!-- Header -->
+    <header class="tv-header">
+      <div class="tv-logo">
+        <div class="tv-logo-icon">🎱</div>
+        <div class="tv-logo-text">
+          <h1>ÁREA27 SINUCA</h1>
+          <p>Painel de Controle em Tempo Real</p>
+        </div>
+      </div>
+      <div id="tv-clock" class="tv-clock">00:00:00</div>
+    </header>
+
+    <!-- Main Grid -->
+    <div class="tv-grid">
+      <!-- Left Column: Active Match & History -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Live Match Card -->
+        <div id="tv-live-card" class="tv-card tv-live-match">
+          <div class="tv-card-title">🎱 PARTIDA ATUAL NA MESA</div>
+          <div id="tv-live-content">
+            <div style="text-align: center; color: #94a3b8; padding: 30px 0; font-size: 1.2rem;">
+              Mesa disponível. Aguardando início de partida...
+            </div>
+          </div>
+        </div>
+
+        <!-- History Card -->
+        <div class="tv-card" style="flex: 1;">
+          <div class="tv-card-title">📜 ÚLTIMAS PARTIDAS</div>
+          <div id="tv-history-list">
+            <div style="text-align: center; color: #94a3b8; padding: 20px;">Carregando histórico...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Ranking Top 10 & Tournament/Badges -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <!-- Top Ranking Card -->
+        <div class="tv-card" style="flex: 1;">
+          <div class="tv-card-title">🏆 CLASSIFICAÇÃO GERAL</div>
+          <table class="tv-ranking-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>JOGADOR</th>
+                <th>ELO</th>
+                <th>V / D</th>
+                <th>APROV %</th>
+              </tr>
+            </thead>
+            <tbody id="tv-ranking-body">
+              <tr><td colspan="5" style="text-align:center; color:#94a3b8;">Carregando ranking...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof initTVDashboard === 'function') {
+        initTVDashboard();
+      }
+    });
+  </script>
+</body>
+</html>

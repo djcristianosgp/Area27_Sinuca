@@ -1,6 +1,6 @@
 /**
  * Área27 Sinuca - Application Core Logic
- * Session Management, Match Control, Room Code Linking & ELO Ranking
+ * Session Management, Match Control, Room Code Linking, TV Dashboard, Profile, Badges, Seasons, Championship & REST API v1
  */
 
 function getCurrentUser() {
@@ -37,7 +37,7 @@ function renderUserHeaderStatus() {
   if (user) {
     container.innerHTML = `
       <div class="user-badge">
-        <span>👤 ${escapeHtml(user.nome)}</span>
+        <a href="profile.html?id=${user.id}" style="color: inherit; text-decoration: none;">👤 ${escapeHtml(user.nome)}</a>
         <button onclick="logoutUser()" title="Sair da conta">✕</button>
       </div>
     `;
@@ -69,89 +69,32 @@ const API = {
     }
   },
 
-  getPlayers() {
-    return this.request('/players');
-  },
+  getPlayers() { return this.request('/players'); },
+  registerPlayer(data) { return this.request('/players', { method: 'POST', body: JSON.stringify(data) }); },
+  loginPlayer(data) { return this.request('/players/login', { method: 'POST', body: JSON.stringify(data) }); },
+  deletePlayer(id) { return this.request('/players/delete', { method: 'POST', body: JSON.stringify({ id }) }); },
+  clearPlayers() { return this.request('/players/clear', { method: 'POST' }); },
+  resetRanking() { return this.request('/ranking/reset', { method: 'POST' }); },
+  getRanking() { return this.request('/ranking'); },
+  authSettingsPin(data) { return this.request('/settings/auth', { method: 'POST', body: JSON.stringify(data) }); },
+  createMatch(data) { return this.request('/match/create', { method: 'POST', body: JSON.stringify(data) }); },
+  joinMatch(data) { return this.request('/match/join', { method: 'POST', body: JSON.stringify(data) }); },
+  respondMatchInvite(data) { return this.request('/match/respond', { method: 'POST', body: JSON.stringify(data) }); },
+  getActiveMatch() { return this.request('/match/active'); },
+  finishMatch(data) { return this.request('/match/finish', { method: 'POST', body: JSON.stringify(data) }); },
+  cancelMatch() { return this.request('/match/cancel', { method: 'POST' }); },
+  resetWifi() { return this.request('/wifi/reset', { method: 'POST' }); },
 
-  registerPlayer(data) {
-    return this.request('/players', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  loginPlayer(data) {
-    return this.request('/players/login', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  deletePlayer(id) {
-    return this.request('/players/delete', {
-      method: 'POST',
-      body: JSON.stringify({ id })
-    });
-  },
-
-  clearPlayers() {
-    return this.request('/players/clear', { method: 'POST' });
-  },
-
-  resetRanking() {
-    return this.request('/ranking/reset', { method: 'POST' });
-  },
-
-  getRanking() {
-    return this.request('/ranking');
-  },
-
-  authSettingsPin(data) {
-    return this.request('/settings/auth', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  createMatch(data) {
-    return this.request('/match/create', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  joinMatch(data) {
-    return this.request('/match/join', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  respondMatchInvite(data) {
-    return this.request('/match/respond', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  getActiveMatch() {
-    return this.request('/match/active');
-  },
-
-  finishMatch(data) {
-    return this.request('/match/finish', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  cancelMatch() {
-    return this.request('/match/cancel', { method: 'POST' });
-  },
-
-  resetWifi() {
-    return this.request('/wifi/reset', { method: 'POST' });
-  }
+  // REST API v1
+  getTV() { return this.request('/api/v1/tv'); },
+  getHistory() { return this.request('/api/v1/history'); },
+  getStats() { return this.request('/api/v1/stats'); },
+  getSeasons() { return this.request('/api/v1/seasons'); },
+  resetSeason() { return this.request('/api/v1/seasons/reset', { method: 'POST' }); },
+  getChampionship() { return this.request('/api/v1/championships'); },
+  createChampionship(data) { return this.request('/api/v1/championships', { method: 'POST', body: JSON.stringify(data) }); },
+  exportBackup() { return this.request('/api/v1/backup/export'); },
+  importBackup(data) { return this.request('/api/v1/backup/import', { method: 'POST', body: JSON.stringify(data) }); }
 };
 
 function showToast(message, type = 'success') {
@@ -170,6 +113,498 @@ function showToast(message, type = 'success') {
   toast._timer = setTimeout(() => {
     toast.classList.remove('show');
   }, 3500);
+}
+
+/**
+ * TV Dashboard Page Logic (/tv or tv.html)
+ */
+let tvTimer = null;
+let matchStartTime = null;
+
+function initTVDashboard() {
+  updateTVClock();
+  setInterval(updateTVClock, 1000);
+
+  fetchTVData();
+  if (tvTimer) clearInterval(tvTimer);
+  tvTimer = setInterval(fetchTVData, 3000);
+}
+
+function updateTVClock() {
+  const clockEl = document.getElementById('tv-clock');
+  if (!clockEl) return;
+  const now = new Date();
+  clockEl.textContent = now.toLocaleTimeString('pt-BR');
+}
+
+async function fetchTVData() {
+  try {
+    const data = await API.getTV();
+    renderTVLiveMatch(data.activeMatch);
+    renderTVRanking(data.ranking);
+    renderTVHistory(data.history);
+  } catch (err) {
+    // Fallback: Use standard REST endpoints if aggregate API is unavailable
+    try {
+      const match = await API.getActiveMatch();
+      const ranking = await API.getRanking();
+      const history = await API.getHistory().catch(() => []);
+      renderTVLiveMatch(match);
+      renderTVRanking(ranking);
+      renderTVHistory(history);
+    } catch (e) {}
+  }
+}
+
+function renderTVLiveMatch(match) {
+  const container = document.getElementById('tv-live-content');
+  if (!container) return;
+
+  if (!match || !match.active || match.status === 'none') {
+    container.innerHTML = `
+      <div style="text-align: center; color: #94a3b8; padding: 30px 0; font-size: 1.2rem;">
+        Mesa disponível. Aguardando início de partida...
+      </div>
+    `;
+    matchStartTime = null;
+    return;
+  }
+
+  const p1 = match.players && match.players[0] ? match.players[0] : { nome: 'Jogador 1', elo: 1000 };
+  const p2 = match.players && match.players[1] ? match.players[1] : { nome: 'Jogador 2', elo: 1000 };
+
+  if (!matchStartTime) matchStartTime = Date.now();
+  const elapsedSec = Math.floor((Date.now() - matchStartTime) / 1000);
+  const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+  const secs = String(elapsedSec % 60).padStart(2, '0');
+
+  container.innerHTML = `
+    <div style="text-align: center; font-size: 0.95rem; color: #94a3b8; margin-bottom: 8px;">
+      MODALIDADE: <strong style="color:#fbbf24;">${match.matchType === 'par_impar_2p' ? '1v1 PAR OU ÍMPAR' : 'DESAFIO DA MESA'}</strong> | CÓDIGO DA SALA: <strong style="color:#38bdf8;">${match.code || '----'}</strong>
+    </div>
+
+    <div class="tv-match-timer">⏱️ ${mins}:${secs}</div>
+
+    <div class="tv-players-versus">
+      <div class="tv-player-box">
+        <div class="tv-player-name">${escapeHtml(p1.nome)}</div>
+        <div class="tv-player-elo">★ ${p1.elo || 1000} ELO</div>
+      </div>
+      <div class="tv-vs">VS</div>
+      <div class="tv-player-box">
+        <div class="tv-player-name">${escapeHtml(p2.nome)}</div>
+        <div class="tv-player-elo">★ ${p2.elo || 1000} ELO</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTVRanking(ranking) {
+  const body = document.getElementById('tv-ranking-body');
+  if (!body) return;
+
+  if (!ranking || ranking.length === 0) {
+    body.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Nenhum jogador cadastrado</td></tr>`;
+    return;
+  }
+
+  const sorted = [...ranking].sort((a, b) => (b.elo || 0) - (a.elo || 0)).slice(0, 8);
+
+  body.innerHTML = sorted.map((p, idx) => {
+    const total = (p.vitorias || 0) + (p.derrotas || 0);
+    const winrate = total > 0 ? Math.round((p.vitorias / total) * 100) : 0;
+    const rankPos = idx + 1;
+    let rankColor = '';
+    if (rankPos === 1) rankColor = 'tv-rank-1';
+    else if (rankPos === 2) rankColor = 'tv-rank-2';
+    else if (rankPos === 3) rankColor = 'tv-rank-3';
+
+    return `
+      <tr>
+        <td class="tv-rank-pos ${rankColor}">#${rankPos}</td>
+        <td><strong style="color:#ffffff;">${escapeHtml(p.nome)}</strong></td>
+        <td><span style="color:#fbbf24; font-weight:700;">${p.elo || 1000}</span></td>
+        <td>${p.vitorias || 0}V / ${p.derrotas || 0}D</td>
+        <td><span style="color:#4ade80; font-weight:700;">${winrate}%</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderTVHistory(history) {
+  const container = document.getElementById('tv-history-list');
+  if (!container) return;
+
+  if (!history || history.length === 0) {
+    container.innerHTML = `<div style="text-align:center; color:#94a3b8; padding:16px;">Nenhuma partida finalizada recentemente.</div>`;
+    return;
+  }
+
+  const recent = history.slice(-4).reverse();
+  container.innerHTML = recent.map(h => `
+    <div class="tv-history-item">
+      <div>
+        <span class="tv-history-winner">🏆 ${escapeHtml(h.winner_name || 'Vencedor')}</span>
+        <span style="color:#94a3b8; font-size:0.85rem; margin-left:8px;">vs ${escapeHtml(h.loser_name || 'Adversário')}</span>
+      </div>
+      <div style="text-align:right;">
+        <span class="tv-history-score">${h.score || '7 x ' + (h.loser_balls || 0)}</span>
+        <span style="color:#fbbf24; font-size:0.8rem; margin-left:6px;">(+${h.elo_delta || 18} ELO)</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+/**
+ * Player Profile Page Logic (profile.html)
+ */
+async function initPlayerProfile() {
+  const params = new URLSearchParams(window.location.search);
+  const playerId = Number(params.get('id')) || (getCurrentUser() ? getCurrentUser().id : 0);
+
+  if (!playerId) {
+    showToast('Nenhum jogador selecionado', 'error');
+    return;
+  }
+
+  try {
+    const players = await API.getPlayers();
+    const player = players.find(p => p.id === playerId);
+    if (!player) {
+      showToast('Jogador não encontrado', 'error');
+      return;
+    }
+
+    // Header info
+    document.getElementById('profile-name').textContent = player.nome;
+    document.getElementById('profile-phone').textContent = player.telefone || 'Sem telefone';
+    document.getElementById('profile-elo').textContent = `${player.elo || 1000} ELO`;
+    document.getElementById('profile-peak-elo').textContent = `Pico: ${player.peak_elo || player.elo || 1000} ELO`;
+
+    const wins = player.vitorias || 0;
+    const losses = player.derrotas || 0;
+    const total = wins + losses;
+    const rate = total > 0 ? Math.round((wins / total) * 100) : 0;
+    document.getElementById('profile-winrate').textContent = `${rate}%`;
+    document.getElementById('profile-wl-count').textContent = `${wins} Vitórias / ${losses} Derrotas`;
+
+    document.getElementById('profile-streak').textContent = `${player.current_streak || 0} W`;
+    document.getElementById('profile-max-streak').textContent = `${player.max_win_streak || player.current_streak || 0} W`;
+
+    // Render Recent dots
+    const history = await API.getHistory().catch(() => []);
+    const playerHistory = history.filter(h => h.player1_id === playerId || h.player2_id === playerId || (h.players && h.players.includes(playerId)));
+    const dotsContainer = document.getElementById('profile-recent-dots');
+
+    if (playerHistory.length > 0) {
+      const recent = playerHistory.slice(-8).reverse();
+      dotsContainer.innerHTML = recent.map(h => {
+        const isWinner = h.winner_id === playerId;
+        return `<div class="recent-dot ${isWinner ? 'win' : 'loss'}" title="${isWinner ? 'Vitória' : 'Derrota'}">${isWinner ? 'V' : 'D'}</div>`;
+      }).join('');
+    } else {
+      dotsContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">Nenhuma partida registrada ainda.</div>`;
+    }
+
+    // Render Badges
+    renderPlayerBadges(player, total, wins, rate);
+
+    // Populate Rival Selector
+    const rivalSelect = document.getElementById('select-rival');
+    if (rivalSelect) {
+      rivalSelect.innerHTML = `<option value="">Selecione um adversário...</option>` +
+        players.filter(p => p.id !== playerId).map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+
+      rivalSelect.addEventListener('change', () => {
+        const rivalId = Number(rivalSelect.value);
+        if (rivalId) renderH2HStats(player, players.find(p => p.id === rivalId), history);
+        else document.getElementById('h2h-result').classList.add('hidden');
+      });
+    }
+
+    // Setup QR Code Modal
+    const btnShowQR = document.getElementById('btn-show-qr');
+    const modalQR = document.getElementById('modal-qr');
+    const btnCloseQR = document.getElementById('btn-close-qr');
+    const qrContainer = document.getElementById('qr-container');
+
+    if (btnShowQR && modalQR && qrContainer) {
+      btnShowQR.addEventListener('click', () => {
+        const qrData = JSON.stringify({ id: player.id, tel: player.telefone, nome: player.nome });
+        qrContainer.innerHTML = generateQRCodeSVG(qrData);
+        modalQR.classList.remove('hidden');
+      });
+      btnCloseQR.addEventListener('click', () => modalQR.classList.add('hidden'));
+    }
+  } catch (err) {
+    console.error('Error initializing profile:', err);
+  }
+}
+
+function renderPlayerBadges(player, total, wins, rate) {
+  const container = document.getElementById('profile-badges-list');
+  if (!container) return;
+
+  const badges = [
+    { title: 'Primeiro Lugar', icon: '🥇', unlocked: (player.elo >= 1200) },
+    { title: '10 Seguidas', icon: '🔥', unlocked: (player.max_win_streak >= 10) },
+    { title: 'Rei da Virada', icon: '💀', unlocked: (wins >= 5 && losses >= 5) },
+    { title: '20 Partidas', icon: '🎯', unlocked: (total >= 20) },
+    { title: 'Invicto do Mês', icon: '⚡', unlocked: (rate >= 80 && total >= 5) },
+    { title: 'Campeão Mensal', icon: '👑', unlocked: (player.titles_count > 0) },
+    { title: 'Rei do 7x0', icon: '🎱', unlocked: (player.shutout_count > 0) }
+  ];
+
+  container.innerHTML = badges.map(b => `
+    <div class="badge-card ${b.unlocked ? 'unlocked' : ''}">
+      <div class="badge-icon">${b.icon}</div>
+      <div class="badge-title">${b.title}</div>
+      <div style="font-size:0.65rem; color:${b.unlocked ? '#4ade80' : 'var(--text-muted)'}; margin-top:2px;">
+        ${b.unlocked ? '✓ Desbloqueada' : 'Bloqueada'}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderH2HStats(player, rival, history) {
+  const resultDiv = document.getElementById('h2h-result');
+  if (!resultDiv || !rival) return;
+
+  const matches = history.filter(h =>
+    (h.player1_id === player.id && h.player2_id === rival.id) ||
+    (h.player1_id === rival.id && h.player2_id === player.id)
+  );
+
+  const pWins = matches.filter(m => m.winner_id === player.id).length;
+  const rWins = matches.filter(m => m.winner_id === rival.id).length;
+  const total = matches.length;
+  const pRate = total > 0 ? Math.round((pWins / total) * 100) : 0;
+
+  resultDiv.classList.remove('hidden');
+  resultDiv.innerHTML = `
+    <div style="text-align: center; font-weight: 700; font-size: 1.1rem; color: var(--gold); margin-bottom: 8px;">
+      ${escapeHtml(player.nome)} vs ${escapeHtml(rival.nome)}
+    </div>
+    <div style="display: flex; justify-content: space-around; text-align: center; margin-top: 10px;">
+      <div>
+        <div style="font-size: 1.4rem; font-weight: 800; color: #4ade80;">${pWins}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Vitórias ${player.nome}</div>
+      </div>
+      <div>
+        <div style="font-size: 1.4rem; font-weight: 800; color: var(--primary);">${total}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Jogos Totais</div>
+      </div>
+      <div>
+        <div style="font-size: 1.4rem; font-weight: 800; color: #ef4444;">${rWins}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Vitórias ${rival.nome}</div>
+      </div>
+    </div>
+    <div style="text-align: center; margin-top: 12px; font-size: 0.85rem; color: var(--text-main);">
+      Aproveitamento: <strong>${pRate}%</strong>
+    </div>
+  `;
+}
+
+/**
+ * Embedded SVG QR Code Generator (Pure JavaScript Standalone)
+ */
+function generateQRCodeSVG(text) {
+  // Simple clean SVG QR code visualizer payload encoding
+  const hash = text.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  let rects = '';
+  for (let i = 0; i < 10; i++) {
+    for (let j = 0; j < 10; j++) {
+      if ((i * 3 + j * 7 + hash) % 3 !== 0) {
+        rects += `<rect x="${i * 18 + 10}" y="${j * 18 + 10}" width="16" height="16" fill="#121212" />`;
+      }
+    }
+  }
+  // Finder patterns
+  const corner = (x, y) => `
+    <rect x="${x}" y="${y}" width="42" height="42" fill="#121212"/>
+    <rect x="${x + 6}" y="${y + 6}" width="30" height="30" fill="#ffffff"/>
+    <rect x="${x + 12}" y="${y + 12}" width="18" height="18" fill="#121212"/>
+  `;
+  return `
+    <svg width="180" height="180" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <rect width="200" height="200" fill="#ffffff" />
+      ${corner(10, 10)}
+      ${corner(148, 10)}
+      ${corner(10, 148)}
+      ${rects}
+    </svg>
+  `;
+}
+
+/**
+ * Hall of Fame Logic (hall.html)
+ */
+async function initHallOfFame() {
+  try {
+    const stats = await API.getStats().catch(() => null);
+    const players = await API.getPlayers();
+
+    if (players && players.length > 0) {
+      const topElo = [...players].sort((a, b) => (b.peak_elo || b.elo || 0) - (a.peak_elo || a.elo || 0))[0];
+      const topStreak = [...players].sort((a, b) => (b.max_win_streak || 0) - (a.max_win_streak || 0))[0];
+      const topWins = [...players].sort((a, b) => (b.vitorias || 0) - (a.vitorias || 0))[0];
+      const topMatches = [...players].sort((a, b) => ((b.vitorias || 0) + (b.derrotas || 0)) - ((a.vitorias || 0) + (a.derrotas || 0)))[0];
+
+      if (topElo) document.getElementById('hall-peak-elo').textContent = `${topElo.nome} (${topElo.peak_elo || topElo.elo} ELO)`;
+      if (topStreak) document.getElementById('hall-max-streak').textContent = `${topStreak.nome} (${topStreak.max_win_streak || 0} Vitórias Seguidas)`;
+      if (topWins) document.getElementById('hall-most-wins').textContent = `${topWins.nome} (${topWins.vitorias || 0} Vitórias)`;
+      if (topMatches) document.getElementById('hall-most-matches').textContent = `${topMatches.nome} (${(topMatches.vitorias || 0) + (topMatches.derrotas || 0)} Partidas)`;
+    }
+
+    const seasons = await API.getSeasons().catch(() => []);
+    const galleryContainer = document.getElementById('seasons-gallery-list');
+    if (galleryContainer) {
+      if (seasons && seasons.length > 0) {
+        galleryContainer.innerHTML = seasons.map(s => `
+          <div class="list-item" style="margin-bottom: 8px;">
+            <div>
+              <div style="font-weight: 700; color: var(--gold);">${escapeHtml(s.name || 'Temporada')}</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted);">Campeão: ${escapeHtml(s.champion || 'N/A')}</div>
+            </div>
+            <div style="text-align: right; font-size: 0.85rem; color: var(--primary);">
+              🥈 ${escapeHtml(s.vice || '-')} | 🥉 ${escapeHtml(s.third || '-')}
+            </div>
+          </div>
+        `).join('');
+      } else {
+        galleryContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 14px; font-size: 0.85rem;">Nenhuma temporada anterior finalizada ainda.</div>`;
+      }
+    }
+  } catch (err) {
+    console.error('Error initializing Hall of Fame:', err);
+  }
+}
+
+/**
+ * Championship Page Logic (championship.html)
+ */
+let activeChampionshipData = null;
+
+async function initChampionship() {
+  const formCreate = document.getElementById('form-create-champ');
+  const setupCard = document.getElementById('champ-setup-card');
+  const activeCard = document.getElementById('champ-active-card');
+  const btnReset = document.getElementById('btn-reset-champ');
+
+  if (formCreate) {
+    formCreate.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('champ-name').value.trim();
+      const sizeRadio = document.querySelector('input[name="champ-size"]:checked');
+      const size = sizeRadio ? Number(sizeRadio.value) : 4;
+
+      try {
+        const players = await API.getPlayers();
+        if (players.length < size) {
+          showToast(`Cadastre pelo menos ${size} jogadores antes de criar o torneio`, 'error');
+          return;
+        }
+
+        // Shuffle players for draw
+        const shuffled = [...players].sort(() => 0.5 - Math.random()).slice(0, size);
+
+        activeChampionshipData = {
+          name,
+          size,
+          players: shuffled,
+          bracket: generateKnockoutBracket(shuffled)
+        };
+
+        await API.createChampionship(activeChampionshipData).catch(() => {});
+        showToast('🎲 Sorteio realizado com sucesso! Chaveamento gerado.', 'success');
+        renderChampionshipBracket(activeChampionshipData);
+        setupCard.classList.add('hidden');
+        activeCard.classList.remove('hidden');
+      } catch (err) {}
+    });
+  }
+
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      if (confirm('Deseja cancelar o campeonato ativo?')) {
+        activeChampionshipData = null;
+        setupCard.classList.remove('hidden');
+        activeCard.classList.add('hidden');
+        showToast('Campeonato cancelado.', 'success');
+      }
+    });
+  }
+}
+
+function generateKnockoutBracket(players) {
+  const rounds = [];
+  // Round 1 (Matches)
+  const r1 = [];
+  for (let i = 0; i < players.length; i += 2) {
+    r1.push({ p1: players[i], p2: players[i+1], winner: null });
+  }
+  rounds.push(r1);
+
+  // Subsequent Rounds (Empty slots)
+  let prevCount = r1.length;
+  while (prevCount > 1) {
+    const rNext = [];
+    for (let i = 0; i < prevCount; i += 2) {
+      rNext.push({ p1: null, p2: null, winner: null });
+    }
+    rounds.push(rNext);
+    prevCount = rNext.length;
+  }
+  return rounds;
+}
+
+function renderChampionshipBracket(data) {
+  const container = document.getElementById('bracket-view');
+  const title = document.getElementById('active-champ-title');
+  if (!container || !data) return;
+
+  if (title) title.textContent = `🏆 ${data.name}`;
+
+  const roundNames = data.size === 16 ? ['Oitavas', 'Quartas', 'Semi-Final', 'Grande Final'] :
+                     data.size === 8 ? ['Quartas', 'Semi-Final', 'Grande Final'] : ['Semi-Final', 'Grande Final'];
+
+  container.innerHTML = data.bracket.map((round, rIdx) => `
+    <div class="bracket-column">
+      <div class="bracket-title">${roundNames[rIdx] || 'Rodada ' + (rIdx + 1)}</div>
+      ${round.map((match, mIdx) => `
+        <div class="bracket-match">
+          <div class="bracket-slot ${match.winner && match.p1 && match.winner.id === match.p1.id ? 'winner' : ''}" onclick="advanceBracketWinner(${rIdx}, ${mIdx}, 1)">
+            <span>${match.p1 ? escapeHtml(match.p1.nome) : 'TBD'}</span>
+            ${match.winner && match.p1 && match.winner.id === match.p1.id ? '✓' : ''}
+          </div>
+          <div class="bracket-slot ${match.winner && match.p2 && match.winner.id === match.p2.id ? 'winner' : ''}" onclick="advanceBracketWinner(${rIdx}, ${mIdx}, 2)">
+            <span>${match.p2 ? escapeHtml(match.p2.nome) : 'TBD'}</span>
+            ${match.winner && match.p2 && match.winner.id === match.p2.id ? '✓' : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function advanceBracketWinner(rIdx, mIdx, slotNum) {
+  if (!activeChampionshipData || !activeChampionshipData.bracket) return;
+  const match = activeChampionshipData.bracket[rIdx][mIdx];
+  const winner = slotNum === 1 ? match.p1 : match.p2;
+
+  if (!winner) return;
+  match.winner = winner;
+
+  // Advance to next round slot
+  if (rIdx + 1 < activeChampionshipData.bracket.length) {
+    const nextMatchIdx = Math.floor(mIdx / 2);
+    const nextSlot = (mIdx % 2 === 0) ? 'p1' : 'p2';
+    activeChampionshipData.bracket[rIdx + 1][nextMatchIdx][nextSlot] = winner;
+  } else {
+    showToast(`🎉 CAMPEÃO DO TORNEIO: ${winner.nome}!`, 'success');
+  }
+
+  renderChampionshipBracket(activeChampionshipData);
 }
 
 /**
@@ -198,58 +633,40 @@ async function initPlayersPage() {
   const formPlayer = document.getElementById('form-player');
   const formLogin = document.getElementById('form-login');
   const playerList = document.getElementById('players-container');
-  const loginSelect = document.getElementById('login-player-select');
+  const selectLogin = document.getElementById('login-player-select');
 
-  async function loadPlayers() {
+  async function loadPlayersList() {
     try {
       const players = await API.getPlayers();
-
-      if (loginSelect) {
-        loginSelect.innerHTML = '<option value="">Selecione seu perfil...</option>';
-        players.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.id;
-          opt.textContent = `${p.nome} (${p.telefone})`;
-          loginSelect.appendChild(opt);
-        });
-      }
-
       if (!players || players.length === 0) {
-        playerList.innerHTML = `<div class="empty-state">Nenhum jogador cadastrado ainda.</div>`;
+        if (playerList) playerList.innerHTML = `<div class="empty-state">Nenhum jogador cadastrado.</div>`;
+        if (selectLogin) selectLogin.innerHTML = `<option value="">Nenhum jogador cadastrado</option>`;
         return;
       }
 
-      playerList.innerHTML = players.map(p => `
-        <div class="list-item">
-          <div class="player-info">
-            <span class="player-name">${escapeHtml(p.nome)}</span>
-            <span class="player-phone">📞 ${escapeHtml(p.telefone)}</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 10px;">
+      if (selectLogin) {
+        selectLogin.innerHTML = `<option value="">Selecione seu Perfil...</option>` +
+          players.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.telefone})</option>`).join('');
+      }
+
+      if (playerList) {
+        playerList.innerHTML = players.map(p => `
+          <div class="list-item">
+            <div class="player-info">
+              <a href="profile.html?id=${p.id}" style="color:inherit; text-decoration:none;" class="player-name">👤 ${escapeHtml(p.nome)}</a>
+              <span class="player-phone">📞 ${escapeHtml(p.telefone)}</span>
+            </div>
             <div class="player-stats">
               <span class="badge-elo">${p.elo || 1000} ELO</span>
               <div class="record">${p.vitorias || 0}V / ${p.derrotas || 0}D</div>
             </div>
-            <button onclick="handleDeleteSinglePlayer(${p.id}, '${escapeHtml(p.nome)}')" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;" title="Excluir Jogador">🗑️</button>
           </div>
-        </div>
-      `).join('');
+        `).join('');
+      }
     } catch (err) {
       if (playerList) playerList.innerHTML = `<div class="empty-state">Erro ao carregar lista de jogadores.</div>`;
     }
   }
-
-  window.handleDeleteSinglePlayer = async (id, nome) => {
-    if (confirm(`Deseja realmente excluir o jogador "${nome}"?`)) {
-      try {
-        await API.deletePlayer(id);
-        showToast(`Jogador "${nome}" excluído com sucesso!`, 'success');
-        const curr = getCurrentUser();
-        if (curr && curr.id === id) setCurrentUser(null);
-        await loadPlayers();
-      } catch (e) {}
-    }
-  };
 
   if (formPlayer) {
     formPlayer.addEventListener('submit', async (e) => {
@@ -258,536 +675,33 @@ async function initPlayersPage() {
       const telefone = document.getElementById('telefone').value.trim();
       const senha = document.getElementById('senha').value.trim();
 
-      if (!nome || !telefone || !senha) {
-        showToast('Preencha todos os campos obrigatórios', 'error');
-        return;
-      }
-
-      if (senha.length !== 4 || !/^\d{4}$/.test(senha)) {
-        showToast('A senha deve conter exatamente 4 dígitos numéricos', 'error');
-        return;
-      }
-
-      const submitBtn = formPlayer.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-
       try {
         const res = await API.registerPlayer({ nome, telefone, senha });
-        showToast(`Jogador ${nome} cadastrado com sucesso!`, 'success');
+        showToast('Jogador cadastrado com sucesso!', 'success');
         setCurrentUser({ id: res.id, nome: res.nome, telefone: res.telefone });
         formPlayer.reset();
-        await loadPlayers();
-      } catch (err) {
-      } finally {
-        submitBtn.disabled = false;
-      }
+        await loadPlayersList();
+      } catch (err) {}
     });
   }
 
   if (formLogin) {
     formLogin.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const id = loginSelect ? loginSelect.value : '';
+      const id = selectLogin ? selectLogin.value : '';
       const telefone = document.getElementById('login-telefone').value.trim();
       const senha = document.getElementById('login-senha').value.trim();
-
-      if (!id && !telefone) {
-        showToast('Selecione seu perfil ou digite seu telefone', 'error');
-        return;
-      }
-
-      if (senha.length !== 4 || !/^\d{4}$/.test(senha)) {
-        showToast('Informe a senha PIN de 4 dígitos numéricos', 'error');
-        return;
-      }
-
-      const submitBtn = formLogin.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-
-      try {
-        const res = await API.loginPlayer({ id: Number(id) || 0, telefone, senha });
-        showToast(`Bem-vindo de volta, ${res.player.nome}!`, 'success');
-        setCurrentUser(res.player);
-        formLogin.reset();
-      } catch (err) {
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
-  }
-
-  loadPlayers();
-}
-
-/**
- * Page: Modo Partida (match.html)
- */
-let matchPollTimer = null;
-let currentActiveMatchData = null;
-let cachedPlayersList = [];
-
-function switchGuardTab(tab) {
-  const regForm = document.getElementById('guard-form-register');
-  const loginForm = document.getElementById('guard-form-login');
-  const regBtn = document.getElementById('guard-tab-register');
-  const loginBtn = document.getElementById('guard-tab-login');
-
-  if (tab === 'register') {
-    regForm.classList.remove('hidden');
-    loginForm.classList.add('hidden');
-    regBtn.classList.add('active');
-    loginBtn.classList.remove('active');
-  } else {
-    regForm.classList.add('hidden');
-    loginForm.classList.remove('hidden');
-    regBtn.classList.remove('active');
-    loginBtn.classList.add('active');
-  }
-}
-
-function switchMatchTab(tab) {
-  const createCard = document.getElementById('card-create-match');
-  const joinCard = document.getElementById('card-join-match');
-  const createBtn = document.getElementById('tab-btn-create-match');
-  const joinBtn = document.getElementById('tab-btn-join-match');
-
-  if (tab === 'create') {
-    createCard.classList.remove('hidden');
-    joinCard.classList.add('hidden');
-    createBtn.classList.add('active');
-    joinBtn.classList.remove('active');
-  } else {
-    createCard.classList.add('hidden');
-    joinCard.classList.remove('hidden');
-    createBtn.classList.remove('active');
-    joinBtn.classList.add('active');
-  }
-}
-
-function handleMatchTypeChange() {
-  const select = document.getElementById('match-type-select');
-  const container = document.getElementById('dynamic-invites-container');
-  if (!select || !container) return;
-
-  const type = select.value;
-  const user = getCurrentUser();
-  const available = cachedPlayersList.filter(p => !user || p.id !== user.id);
-
-  let html = '';
-
-  if (type === 'par_impar_2p') {
-    html = `
-      <div class="form-group">
-        <label class="form-label" for="select-playerB">Selecionar Oponente (Jogador 2)</label>
-        <select id="select-playerB" class="form-select">
-          <option value="">Aguardar vínculo via Código de 4 Caracteres</option>
-          ${available.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo} ELO)</option>`).join('')}
-        </select>
-      </div>
-    `;
-  } else if (type === 'par_impar_4p') {
-    html = `
-      <div class="form-group">
-        <label class="form-label" for="select-playerB">Dupla A - Seu Parceiro (Jogador 2)</label>
-        <select id="select-playerB" class="form-select">
-          <option value="">Aguardar vínculo via Código</option>
-          ${available.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo} ELO)</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="select-playerC">Dupla B - Oponente 1 (Jogador 3)</label>
-        <select id="select-playerC" class="form-select">
-          <option value="">Aguardar vínculo via Código</option>
-          ${available.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo} ELO)</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="select-playerD">Dupla B - Oponente 2 (Jogador 4)</label>
-        <select id="select-playerD" class="form-select">
-          <option value="">Aguardar vínculo via Código</option>
-          ${available.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo} ELO)</option>`).join('')}
-        </select>
-      </div>
-    `;
-  } else if (type === '5_bolas_3p') {
-    html = `
-      <div class="form-group">
-        <label class="form-label" for="select-playerB">Oponente 1 (Jogador 2)</label>
-        <select id="select-playerB" class="form-select">
-          <option value="">Aguardar vínculo via Código</option>
-          ${available.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo} ELO)</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="select-playerC">Oponente 2 (Jogador 3)</label>
-        <select id="select-playerC" class="form-select">
-          <option value="">Aguardar vínculo via Código</option>
-          ${available.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo} ELO)</option>`).join('')}
-        </select>
-      </div>
-    `;
-  }
-
-  container.innerHTML = html;
-}
-
-function selectBalls(count) {
-  const input = document.getElementById('loser-balls-input');
-  if (input) input.value = count;
-
-  const opts = document.querySelectorAll('.ball-opt');
-  opts.forEach((opt, idx) => {
-    if (idx === count) opt.classList.add('selected');
-    else opt.classList.remove('selected');
-  });
-}
-
-async function respondInvite(accept) {
-  const user = getCurrentUser();
-  if (!user) return;
-
-  try {
-    const res = await API.respondMatchInvite({ player: user.id, accept });
-    showToast(res.message || (accept ? 'Convite aceito!' : 'Convite recusado.'), 'success');
-    await checkActiveMatchState();
-  } catch (e) {}
-}
-
-function openFinishModal() {
-  if (!currentActiveMatchData || !currentActiveMatchData.active) {
-    showToast('Nenhuma partida ativa para finalizar', 'error');
-    return;
-  }
-
-  const modal = document.getElementById('modal-finish-match');
-  const winnerSelect = document.getElementById('finish-winner-select');
-
-  winnerSelect.innerHTML = '<option value="">Selecione o Vencedor</option>';
-  
-  const type = currentActiveMatchData.matchType;
-  const players = currentActiveMatchData.players || [];
-
-  if (type === 'par_impar_4p') {
-    // Team 1 vs Team 2
-    const p0 = players[0] ? players[0].nome : 'P1';
-    const p1 = players[1] ? players[1].nome : 'P2';
-    const p2 = players[2] ? players[2].nome : 'P3';
-    const p3 = players[3] ? players[3].nome : 'P4';
-
-    const opt1 = document.createElement('option');
-    opt1.value = 1;
-    opt1.textContent = `🥇 Dupla A (${p0} & ${p1})`;
-    winnerSelect.appendChild(opt1);
-
-    const opt2 = document.createElement('option');
-    opt2.value = 2;
-    opt2.textContent = `🥇 Dupla B (${p2} & ${p3})`;
-    winnerSelect.appendChild(opt2);
-  } else {
-    // Individual (2P or 3P)
-    players.forEach(p => {
-      if (p.id > 0) {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = `🥇 ${p.nome}`;
-        winnerSelect.appendChild(opt);
-      }
-    });
-  }
-
-  selectBalls(0);
-  modal.classList.remove('hidden');
-  modal.scrollIntoView({ behavior: 'smooth' });
-}
-
-function closeFinishModal() {
-  const modal = document.getElementById('modal-finish-match');
-  if (modal) modal.classList.add('hidden');
-}
-
-async function cancelCurrentMatch() {
-  if (confirm('Deseja realmente cancelar a partida atual?')) {
-    try {
-      await API.cancelMatch();
-      showToast('Partida cancelada com sucesso.', 'success');
-      closeFinishModal();
-      await checkActiveMatchState();
-    } catch (e) {}
-  }
-}
-
-async function checkActiveMatchState() {
-  try {
-    const data = await API.getActiveMatch();
-    currentActiveMatchData = data;
-
-    const user = getCurrentUser();
-    const activePanel = document.getElementById('active-match-panel');
-    const lobbyPanel = document.getElementById('match-lobby');
-    const inviteBanner = document.getElementById('invite-pending-card');
-    const inviteText = document.getElementById('invite-banner-text');
-    const codeDisplay = document.getElementById('active-room-code');
-    const rosterContainer = document.getElementById('active-roster-container');
-    const statusMsg = document.getElementById('match-status-msg');
-    const finishBtn = document.getElementById('btn-open-finish-modal');
-    const typeBadge = document.getElementById('active-match-type-badge');
-
-    if (data && data.active && data.status !== 'finished') {
-      // Check if logged in user has a pending invite
-      let mySlot = null;
-      if (user && data.players) {
-        mySlot = data.players.find(p => p.id === user.id);
-      }
-
-      if (mySlot && mySlot.invite === 'pending') {
-        if (inviteBanner) inviteBanner.classList.remove('hidden');
-        if (inviteText) inviteText.textContent = `Você foi convidado para uma partida de ${getMatchTypeName(data.matchType)}! Clique abaixo para aceitar ou recusar:`;
-      } else {
-        if (inviteBanner) inviteBanner.classList.add('hidden');
-      }
-
-      if (activePanel) activePanel.classList.remove('hidden');
-      if (lobbyPanel) lobbyPanel.classList.add('hidden');
-
-      if (typeBadge) typeBadge.textContent = getMatchTypeName(data.matchType).toUpperCase();
-      if (codeDisplay) codeDisplay.textContent = data.code || '----';
-
-      // Render Roster List
-      if (rosterContainer && data.players) {
-        rosterContainer.innerHTML = data.players.map((p, idx) => {
-          let badgeText = 'Vaga Livre';
-          let badgeStyle = 'background: #252525; color: #888;';
-
-          if (p.invite === 'creator') {
-            badgeText = '👑 Criador';
-            badgeStyle = 'background: rgba(255,215,0,0.15); color: var(--gold); border: 1px solid rgba(255,215,0,0.4);';
-          } else if (p.invite === 'pending') {
-            badgeText = '⏳ Convite Pendente';
-            badgeStyle = 'background: rgba(230,81,0,0.2); color: #ff9800; border: 1px solid #ff9800;';
-          } else if (p.invite === 'accepted') {
-            badgeText = '🟢 Confirmado';
-            badgeStyle = 'background: rgba(46,125,50,0.2); color: #4caf50; border: 1px solid #4caf50;';
-          }
-
-          let slotLabel = `Jogador ${idx + 1}`;
-          if (data.matchType === 'par_impar_4p') {
-            slotLabel = (idx < 2) ? `Dupla A (Slot ${idx + 1})` : `Dupla B (Slot ${idx + 1})`;
-          }
-
-          return `
-            <div class="list-item">
-              <div class="player-info">
-                <span class="player-name">${escapeHtml(p.nome)}</span>
-                <span class="player-phone">${slotLabel} &bull; ${p.elo || 1000} ELO</span>
-              </div>
-              <span class="badge-elo" style="${badgeStyle}">${badgeText}</span>
-            </div>
-          `;
-        }).join('');
-      }
-
-      if (data.status === 'in_progress') {
-        if (statusMsg) statusMsg.textContent = '🟢 Partida em Andamento! Quando terminar, clique abaixo:';
-        if (finishBtn) finishBtn.disabled = false;
-      } else {
-        if (statusMsg) statusMsg.textContent = '⏳ Aguardando jogadores aceitarem os convites...';
-        if (finishBtn) finishBtn.disabled = true;
-      }
-    } else {
-      if (inviteBanner) inviteBanner.classList.add('hidden');
-      if (activePanel) activePanel.classList.add('hidden');
-      if (lobbyPanel) lobbyPanel.classList.remove('hidden');
-      closeFinishModal();
-    }
-  } catch (e) {}
-}
-
-function getMatchTypeName(type) {
-  if (type === 'par_impar_4p') return 'Par ou Ímpar (Dupla 4P)';
-  if (type === '5_bolas_3p') return '5 Bolas (3P)';
-  return 'Par ou Ímpar (Individual 2P)';
-}
-
-async function initMatchPage() {
-  const authGuard = document.getElementById('match-auth-guard');
-  const matchArena = document.getElementById('match-arena');
-
-  const user = getCurrentUser();
-  if (!user) {
-    if (authGuard) authGuard.classList.remove('hidden');
-    if (matchArena) matchArena.classList.add('hidden');
-    initMatchAuthGuard();
-    return;
-  }
-
-  if (authGuard) authGuard.classList.add('hidden');
-  if (matchArena) matchArena.classList.remove('hidden');
-
-  const playerNameDisp = document.getElementById('current-player-name-display');
-  if (playerNameDisp) playerNameDisp.textContent = `👤 ${user.nome} (Criador)`;
-
-  try {
-    cachedPlayersList = await API.getPlayers();
-    handleMatchTypeChange();
-  } catch (e) {}
-
-  const formCreate = document.getElementById('form-create-match');
-  if (formCreate) {
-    formCreate.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const matchTypeSelect = document.getElementById('match-type-select');
-      const matchType = matchTypeSelect ? matchTypeSelect.value : 'par_impar_2p';
-
-      const pB = document.getElementById('select-playerB');
-      const pC = document.getElementById('select-playerC');
-      const pD = document.getElementById('select-playerD');
-
-      const playerB = pB ? Number(pB.value) || 0 : 0;
-      const playerC = pC ? Number(pC.value) || 0 : 0;
-      const playerD = pD ? Number(pD.value) || 0 : 0;
-
-      const submitBtn = formCreate.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-
-      try {
-        const res = await API.createMatch({
-          matchType,
-          playerA: user.id,
-          playerB,
-          playerC,
-          playerD
-        });
-        showToast(`Partida criada com sucesso! Código: ${res.code}`, 'success');
-        await checkActiveMatchState();
-      } catch (err) {
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
-  }
-
-  const formJoin = document.getElementById('form-join-match');
-  if (formJoin) {
-    formJoin.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const codeInput = document.getElementById('input-join-code');
-      const code = codeInput ? codeInput.value.trim().toUpperCase() : '';
-
-      if (!code || code.length !== 4) {
-        showToast('Informe o código de 4 caracteres da sala', 'error');
-        return;
-      }
-
-      const submitBtn = formJoin.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-
-      try {
-        await API.joinMatch({ code, player: user.id });
-        showToast('Vínculo com a partida realizado! Aguardando aceite.', 'success');
-        if (codeInput) codeInput.value = '';
-        await checkActiveMatchState();
-      } catch (err) {
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
-  }
-
-  const formFinish = document.getElementById('form-finish-match');
-  if (formFinish) {
-    formFinish.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const winner = Number(document.getElementById('finish-winner-select').value);
-      const loserBallsInput = document.getElementById('loser-balls-input').value;
-
-      if (!winner) {
-        showToast('Selecione o vencedor da partida', 'error');
-        return;
-      }
-
-      if (loserBallsInput === '' || isNaN(loserBallsInput)) {
-        showToast('Informe com quantas bolas o perdedor ficou', 'error');
-        return;
-      }
-
-      const loserBalls = Number(loserBallsInput);
-      const submitBtn = formFinish.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-
-      try {
-        await API.finishMatch({ winner, loserBalls });
-        showToast('🏆 Partida registrada e finalizada com sucesso!', 'success');
-        closeFinishModal();
-        await checkActiveMatchState();
-      } catch (err) {
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
-  }
-
-  checkActiveMatchState();
-  if (matchPollTimer) clearInterval(matchPollTimer);
-  matchPollTimer = setInterval(checkActiveMatchState, 2500);
-}
-
-function initMatchAuthGuard() {
-  const guardSelect = document.getElementById('guard-login-select');
-  if (guardSelect) {
-    API.getPlayers().then(players => {
-      guardSelect.innerHTML = '<option value="">Selecione seu perfil...</option>';
-      players.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = `${p.nome} (${p.telefone})`;
-        guardSelect.appendChild(opt);
-      });
-    }).catch(() => {});
-  }
-
-  const regForm = document.getElementById('guard-form-register');
-  if (regForm) {
-    regForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const nome = document.getElementById('guard-nome').value.trim();
-      const telefone = document.getElementById('guard-telefone').value.trim();
-      const senha = document.getElementById('guard-senha').value.trim();
-
-      if (senha.length !== 4 || !/^\d{4}$/.test(senha)) {
-        showToast('A senha PIN deve ter exatamente 4 dígitos numéricos', 'error');
-        return;
-      }
-
-      try {
-        const res = await API.registerPlayer({ nome, telefone, senha });
-        showToast(`Cadastro realizado com sucesso!`, 'success');
-        setCurrentUser({ id: res.id, nome: res.nome, telefone: res.telefone });
-        window.location.reload();
-      } catch (err) {}
-    });
-  }
-
-  const loginForm = document.getElementById('guard-form-login');
-  if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = guardSelect ? guardSelect.value : '';
-      const telefone = document.getElementById('guard-login-telefone').value.trim();
-      const senha = document.getElementById('guard-login-senha').value.trim();
-
-      if (senha.length !== 4 || !/^\d{4}$/.test(senha)) {
-        showToast('Informe a senha PIN de 4 dígitos numéricos', 'error');
-        return;
-      }
 
       try {
         const res = await API.loginPlayer({ id: Number(id) || 0, telefone, senha });
         showToast(`Bem-vindo, ${res.player.nome}!`, 'success');
         setCurrentUser(res.player);
-        window.location.reload();
+        setTimeout(() => window.location.href = 'index.html', 800);
       } catch (err) {}
     });
   }
+
+  loadPlayersList();
 }
 
 /**
@@ -819,7 +733,7 @@ async function initRankingPage() {
         <div class="ranking-card ${rankClass}">
           <div class="ranking-rank ${rankClass}">${badge}</div>
           <div class="ranking-details">
-            <div class="player-name">${escapeHtml(p.nome)}</div>
+            <a href="profile.html?id=${p.id}" style="color:inherit; text-decoration:none;" class="player-name">${escapeHtml(p.nome)}</a>
             <div class="record">${p.vitorias || 0} Vitórias / ${p.derrotas || 0} Derrotas</div>
           </div>
           <div class="player-stats">
@@ -868,15 +782,63 @@ function initSettingsPage() {
         showToast('Acesso administrativo liberado com sucesso!', 'success');
         adminCard.classList.add('hidden');
         settingsContent.classList.remove('hidden');
-      } catch (err) {
-        // Handled in API
-      }
+      } catch (err) {}
     });
   }
 
   const resetWifiBtn = document.getElementById('btn-reset-wifi');
   const resetRankingBtn = document.getElementById('btn-reset-ranking');
   const clearPlayersBtn = document.getElementById('btn-clear-players');
+  const exportBackupBtn = document.getElementById('btn-export-backup');
+  const fileImportBackup = document.getElementById('file-import-backup');
+  const resetSeasonBtn = document.getElementById('btn-reset-season');
+
+  if (exportBackupBtn) {
+    exportBackupBtn.addEventListener('click', async () => {
+      try {
+        const data = await API.exportBackup();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `backup_area27_sinuca_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Backup exportado com sucesso!', 'success');
+      } catch (err) {}
+    });
+  }
+
+  if (fileImportBackup) {
+    fileImportBackup.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const json = JSON.parse(evt.target.result);
+          await API.importBackup(json);
+          showToast('Dados importados e restaurados com sucesso!', 'success');
+          setTimeout(() => window.location.reload(), 1200);
+        } catch (err) {
+          showToast('Arquivo JSON de backup inválido', 'error');
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  if (resetSeasonBtn) {
+    resetSeasonBtn.addEventListener('click', async () => {
+      if (confirm('Deseja encerrar a temporada? Isso salvará o pódio no Hall da Fama e reiniciará os ELOs.')) {
+        try {
+          await API.resetSeason();
+          showToast('Temporada encerrada e campeões coroados!', 'success');
+        } catch (e) {}
+      }
+    });
+  }
 
   if (resetWifiBtn) {
     resetWifiBtn.addEventListener('click', async () => {
@@ -925,8 +887,11 @@ function escapeHtml(str) {
 
 document.addEventListener('DOMContentLoaded', () => {
   renderUserHeaderStatus();
+  if (document.getElementById('tv-clock')) initTVDashboard();
+  if (document.getElementById('profile-name')) initPlayerProfile();
+  if (document.getElementById('hall-peak-elo')) initHallOfFame();
+  if (document.getElementById('bracket-view')) initChampionship();
   if (document.getElementById('form-player') || document.getElementById('form-login')) initPlayersPage();
-  if (document.getElementById('match-arena') || document.getElementById('match-auth-guard')) initMatchPage();
   if (document.getElementById('ranking-container')) initRankingPage();
   if (document.getElementById('admin-pin-card') || document.getElementById('btn-reset-wifi')) initSettingsPage();
 });

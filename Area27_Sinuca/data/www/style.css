@@ -235,6 +235,11 @@ html, body {
   transform: scale(0.98);
 }
 
+.btn-danger {
+  background: var(--error-color);
+  color: var(--text-main);
+}
+
 .btn-outline {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -432,6 +437,73 @@ html, body {
   display: none !important;
 }
 
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 16px;
+}
+
+.modal-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+/* Badges Component */
+.badge-card {
+  background: rgba(22, 22, 22, 0.8);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.badge-card.unlocked {
+  border-color: var(--gold);
+  background: linear-gradient(135deg, #1e1e1e, rgba(255,215,0,0.1));
+}
+
+.badge-card .badge-icon {
+  font-size: 1.8rem;
+  margin-bottom: 4px;
+}
+
+.badge-card .badge-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Recent Games W/L Dots */
+.recent-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.recent-dot.win { background: #2e7d32; color: #fff; }
+.recent-dot.loss { background: #c62828; color: #fff; }
+
 /* User Profile & Auth Styles */
 .user-badge {
   display: inline-flex;
@@ -591,4 +663,3 @@ html, body {
   color: var(--primary);
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
-

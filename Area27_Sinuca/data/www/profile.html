@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Perfil do Jogador - Área27 Sinuca</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <header class="header">
+      <div class="header-title">
+        <div class="logo-badge">👤</div>
+        <h1>Perfil do Jogador</h1>
+      </div>
+      <a href="players.html" class="back-btn">← Voltar</a>
+    </header>
+
+    <main>
+      <!-- Player Header Card -->
+      <div class="card" style="margin-bottom: 20px; text-align: center;">
+        <div id="profile-avatar" class="avatar-large" style="width: 72px; height: 72px; font-size: 2.2rem; margin: 0 auto 12px auto; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(59,147,193,0.4);">
+          🎱
+        </div>
+        <h2 id="profile-name" style="font-size: 1.5rem; margin-bottom: 4px;">Carregando...</h2>
+        <p id="profile-phone" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px;"></p>
+        <button id="btn-show-qr" class="btn btn-secondary" style="width: auto; padding: 6px 16px; font-size: 0.85rem; margin: 0 auto;">📱 Exibir QR Code</button>
+      </div>
+
+      <!-- Main Stats Grid -->
+      <div class="card-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 20px;">
+        <div class="card" style="text-align: center; padding: 14px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Pontuação ELO</div>
+          <div id="profile-elo" style="font-size: 2rem; font-weight: 800; color: var(--gold); margin-top: 4px;">-</div>
+          <div id="profile-peak-elo" style="font-size: 0.75rem; color: var(--text-muted);">Pico: -</div>
+        </div>
+
+        <div class="card" style="text-align: center; padding: 14px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Taxa de Vitória</div>
+          <div id="profile-winrate" style="font-size: 2rem; font-weight: 800; color: #4ade80; margin-top: 4px;">-</div>
+          <div id="profile-wl-count" style="font-size: 0.75rem; color: var(--text-muted);">0V / 0D</div>
+        </div>
+
+        <div class="card" style="text-align: center; padding: 14px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Sequência Atual</div>
+          <div id="profile-streak" style="font-size: 1.6rem; font-weight: 800; color: #38bdf8; margin-top: 4px;">-</div>
+        </div>
+
+        <div class="card" style="text-align: center; padding: 14px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Maior Sequência</div>
+          <div id="profile-max-streak" style="font-size: 1.6rem; font-weight: 800; color: #f59e0b; margin-top: 4px;">-</div>
+        </div>
+      </div>
+
+      <!-- Recent Matches Indicators -->
+      <div class="card" style="margin-bottom: 20px;">
+        <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--primary);">Últimos Jogos</h3>
+        <div id="profile-recent-dots" style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <div style="color: var(--text-muted); font-size: 0.85rem;">Nenhuma partida registrada ainda.</div>
+        </div>
+      </div>
+
+      <!-- Badges / Conquistas Card -->
+      <div class="card" style="margin-bottom: 20px;">
+        <h3 style="font-size: 1rem; margin-bottom: 12px; color: var(--gold);">🏅 Conquistas & Medalhas</h3>
+        <div id="profile-badges-list" class="badge-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px;">
+          <!-- Badges dynamically rendered here -->
+        </div>
+      </div>
+
+      <!-- Head to Head Compare Card -->
+      <div class="card" style="margin-bottom: 20px;">
+        <h3 style="font-size: 1rem; margin-bottom: 12px; color: #ec4899;">⚔️ Confronto Direto (Head-to-Head)</h3>
+        <div class="form-group">
+          <label class="form-label" for="select-rival">Comparar estatísticas contra:</label>
+          <select id="select-rival" class="form-input">
+            <option value="">Selecione um adversário...</option>
+          </select>
+        </div>
+        <div id="h2h-result" class="hidden" style="margin-top: 14px; background: rgba(0,0,0,0.2); padding: 14px; border-radius: 8px;">
+          <!-- H2H Comparison populated via app.js -->
+        </div>
+      </div>
+    </main>
+
+    <!-- Modal QR Code -->
+    <div id="modal-qr" class="modal-overlay hidden">
+      <div class="modal-card" style="text-align: center;">
+        <h3 style="margin-bottom: 12px;">📱 QR Code de Acesso</h3>
+        <div id="qr-container" style="display: flex; justify-content: center; padding: 16px; background: white; border-radius: 12px; width: 200px; height: 200px; margin: 0 auto 16px auto;">
+          <!-- SVG QR Code generated here -->
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">Escaneie este QR Code no salão para login instantâneo.</p>
+        <button id="btn-close-qr" class="btn btn-secondary">Fechar</button>
+      </div>
+    </div>
+
+    <footer class="footer">
+      Área27 Sinuca &bull; ESP8266 Edition
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof initPlayerProfile === 'function') {
+        initPlayerProfile();
+      }
+    });
+  </script>
+</body>
+</html>

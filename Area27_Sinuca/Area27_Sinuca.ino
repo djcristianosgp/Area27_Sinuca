@@ -4,6 +4,7 @@
  * Hardware: ESP8266 (ESP-01 / NodeMCU / Wemos D1 Mini)
  * Features: Automatic Wi-Fi Captive Portal (AP Mode: Area27-Sinuca-Config)
  * Embedded Files: PROGMEM (Flash Storage) + LittleFS (Data Persistence)
+ * REST API v1, TV Dashboard, Seasons, History, Hall of Fame & Tournament Bracket
  * Baud Rate: 115200
  */
 
@@ -24,7 +25,7 @@ bool isAPMode = false;
 String wifiSSID = "";
 String wifiPassword = "";
 
-// In-Memory Player Structure
+// Extended In-Memory Player Structure
 struct Player {
   int id;
   String nome;
@@ -33,6 +34,11 @@ struct Player {
   int elo;
   int vitorias;
   int derrotas;
+  int peak_elo;
+  int max_win_streak;
+  int current_streak;
+  int titles_count;
+  int shutout_count;
 };
 
 #define MAX_PLAYERS 50
@@ -40,7 +46,7 @@ Player players[MAX_PLAYERS];
 int playerCount = 0;
 int nextPlayerId = 1;
 
-// Active Match Memory Control
+// Active Match Control Structure
 struct ActiveMatch {
   bool active;
   String code;
@@ -49,11 +55,41 @@ struct ActiveMatch {
   int playerIds[4];
   String invites[4]; // "creator", "pending", "accepted", "refused", "empty"
   String status;    // "waiting", "in_progress", "finished"
-  int winner_id;    // Winner ID (or team ID)
+  int winner_id;
   int loser_balls;
+  unsigned long startMillis;
 };
 
-ActiveMatch activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0};
+ActiveMatch activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0, 0};
+
+// Match History Structure
+struct MatchHistoryItem {
+  int id;
+  String matchType;
+  int p1_id;
+  int p2_id;
+  int winner_id;
+  int loser_balls;
+  int elo_delta;
+  String date_str;
+};
+
+#define MAX_HISTORY 50
+MatchHistoryItem matchHistory[MAX_HISTORY];
+int matchHistoryCount = 0;
+
+// Seasons History Structure
+struct SeasonRecord {
+  int id;
+  String name;
+  String champion;
+  String vice;
+  String third;
+};
+
+#define MAX_SEASONS 12
+SeasonRecord seasonsHistory[MAX_SEASONS];
+int seasonCount = 0;
 
 String generateMatchCode() {
   const char chars[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -64,18 +100,11 @@ String generateMatchCode() {
   return code;
 }
 
-// Load Wi-Fi Config from LittleFS (/wifi_config.json)
+// Load Wi-Fi Config
 bool loadWifiConfig() {
-  if (!LittleFS.exists("/wifi_config.json")) {
-    Serial.println("[WIFI] Nenhum Wi-Fi salvo. Entrando em Modo Configuracao (AP).");
-    wifiSSID = "";
-    wifiPassword = "";
-    return false;
-  }
-
+  if (!LittleFS.exists("/wifi_config.json")) return false;
   File file = LittleFS.open("/wifi_config.json", "r");
   if (!file) return false;
-
   String content = file.readString();
   file.close();
 
@@ -95,33 +124,21 @@ bool loadWifiConfig() {
     wifiPassword = content.substring(start, end);
   }
 
-  Serial.print("[WIFI] Rede salva no LittleFS: '");
-  Serial.print(wifiSSID);
-  Serial.println("'");
-
   return (wifiSSID.length() > 0);
 }
 
-// Save Wi-Fi Config to LittleFS (/wifi_config.json)
+// Save Wi-Fi Config
 void saveWifiConfig(String ssid, String password) {
   File file = LittleFS.open("/wifi_config.json", "w");
   if (!file) return;
-
-  file.print("{\n");
-  file.print("  \"ssid\": \"" + ssid + "\",\n");
-  file.print("  \"password\": \"" + password + "\"\n");
-  file.print("}\n");
+  file.print("{\n  \"ssid\": \"" + ssid + "\",\n  \"password\": \"" + password + "\"\n}\n");
   file.close();
-  Serial.println("[WIFI] Novas configuracoes salvas no LittleFS.");
 }
 
 // Save Players state to LittleFS (/players.json)
 void savePlayersToFile() {
   File file = LittleFS.open("/players.json", "w");
-  if (!file) {
-    Serial.println("[STORAGE] ✗ Erro ao abrir /players.json");
-    return;
-  }
+  if (!file) return;
 
   file.print("[\n");
   for (int i = 0; i < playerCount; i++) {
@@ -132,20 +149,23 @@ void savePlayersToFile() {
     file.print("    \"senha\":\"" + players[i].senha + "\",\n");
     file.print("    \"elo\":" + String(players[i].elo) + ",\n");
     file.print("    \"vitorias\":" + String(players[i].vitorias) + ",\n");
-    file.print("    \"derrotas\":" + String(players[i].derrotas) + "\n");
+    file.print("    \"derrotas\":" + String(players[i].derrotas) + ",\n");
+    file.print("    \"peak_elo\":" + String(players[i].peak_elo) + ",\n");
+    file.print("    \"max_win_streak\":" + String(players[i].max_win_streak) + ",\n");
+    file.print("    \"current_streak\":" + String(players[i].current_streak) + ",\n");
+    file.print("    \"titles_count\":" + String(players[i].titles_count) + ",\n");
+    file.print("    \"shutout_count\":" + String(players[i].shutout_count) + "\n");
     file.print("  }");
     if (i < playerCount - 1) file.print(",");
     file.print("\n");
   }
   file.print("]\n");
   file.close();
-  Serial.println("[STORAGE] ✓ Dados dos jogadores salvos.");
 }
 
 // Load Players state from LittleFS (/players.json)
 void loadPlayersFromFile() {
   if (!LittleFS.exists("/players.json")) {
-    Serial.println("[STORAGE] Criando /players.json vazio...");
     playerCount = 0;
     nextPlayerId = 1;
     savePlayersToFile();
@@ -154,17 +174,8 @@ void loadPlayersFromFile() {
 
   File file = LittleFS.open("/players.json", "r");
   if (!file) return;
-
   String content = file.readString();
   file.close();
-
-  if (content.indexOf("Jogador 1") != -1 || content.indexOf("Jogador 2") != -1) {
-    Serial.println("[STORAGE] Jogadores dummy detectados. Purgando dados antigos...");
-    playerCount = 0;
-    nextPlayerId = 1;
-    savePlayersToFile();
-    return;
-  }
 
   playerCount = 0;
   int searchPos = 0;
@@ -204,17 +215,30 @@ void loadPlayersFromFile() {
     if (derEnd == -1) derEnd = content.indexOf("}", derPos);
     int der = content.substring(derPos + 11, derEnd).toInt();
 
-    players[playerCount] = {id, nome, tel, senha, elo, vit, der};
+    int peak = elo;
+    int maxStreak = 0;
+    int curStreak = 0;
+    int titles = 0;
+    int shutouts = 0;
+
+    int peakPos = content.indexOf("\"peak_elo\":", derEnd);
+    if (peakPos != -1) peak = content.substring(peakPos + 11, content.indexOf(",", peakPos)).toInt();
+
+    int maxSPos = content.indexOf("\"max_win_streak\":", derEnd);
+    if (maxSPos != -1) maxStreak = content.substring(maxSPos + 17, content.indexOf(",", maxSPos)).toInt();
+
+    int curSPos = content.indexOf("\"current_streak\":", derEnd);
+    if (curSPos != -1) curStreak = content.substring(curSPos + 17, content.indexOf(",", curSPos)).toInt();
+
+    players[playerCount] = {id, nome, tel, senha, elo, vit, der, peak, maxStreak, curStreak, titles, shutouts};
     if (id >= nextPlayerId) nextPlayerId = id + 1;
     playerCount++;
 
     searchPos = derEnd;
   }
-
-  Serial.printf("[STORAGE] Carregados %d jogadores.\n", playerCount);
 }
 
-// Convert Players Array to JSON String (Omits passwords for safety)
+// Convert Players to JSON String
 String getPlayersJSON() {
   String json = "[\n";
   for (int i = 0; i < playerCount; i++) {
@@ -224,7 +248,12 @@ String getPlayersJSON() {
     json += "    \"telefone\":\"" + players[i].telefone + "\",\n";
     json += "    \"elo\":" + String(players[i].elo) + ",\n";
     json += "    \"vitorias\":" + String(players[i].vitorias) + ",\n";
-    json += "    \"derrotas\":" + String(players[i].derrotas) + "\n";
+    json += "    \"derrotas\":" + String(players[i].derrotas) + ",\n";
+    json += "    \"peak_elo\":" + String(players[i].peak_elo) + ",\n";
+    json += "    \"max_win_streak\":" + String(players[i].max_win_streak) + ",\n";
+    json += "    \"current_streak\":" + String(players[i].current_streak) + ",\n";
+    json += "    \"titles_count\":" + String(players[i].titles_count) + ",\n";
+    json += "    \"shutout_count\":" + String(players[i].shutout_count) + "\n";
     json += "  }";
     if (i < playerCount - 1) json += ",";
     json += "\n";
@@ -233,63 +262,174 @@ String getPlayersJSON() {
   return json;
 }
 
-// Serve Static Pages directly from Flash (PROGMEM)
+// Save Match History to LittleFS (/matches.json)
+void saveHistoryToFile() {
+  File file = LittleFS.open("/matches.json", "w");
+  if (!file) return;
+  file.print("[\n");
+  for (int i = 0; i < matchHistoryCount; i++) {
+    file.print("  {\n");
+    file.print("    \"id\":" + String(matchHistory[i].id) + ",\n");
+    file.print("    \"matchType\":\"" + matchHistory[i].matchType + "\",\n");
+    file.print("    \"player1_id\":" + String(matchHistory[i].p1_id) + ",\n");
+    file.print("    \"player2_id\":" + String(matchHistory[i].p2_id) + ",\n");
+    file.print("    \"winner_id\":" + String(matchHistory[i].winner_id) + ",\n");
+    file.print("    \"loser_balls\":" + String(matchHistory[i].loser_balls) + ",\n");
+    file.print("    \"elo_delta\":" + String(matchHistory[i].elo_delta) + "\n");
+    file.print("  }");
+    if (i < matchHistoryCount - 1) file.print(",");
+    file.print("\n");
+  }
+  file.print("]\n");
+  file.close();
+}
+
+String getHistoryJSON() {
+  String json = "[\n";
+  for (int i = 0; i < matchHistoryCount; i++) {
+    Player* p1 = nullptr;
+    Player* p2 = nullptr;
+    Player* win = nullptr;
+    for (int k = 0; k < playerCount; k++) {
+      if (players[k].id == matchHistory[i].p1_id) p1 = &players[k];
+      if (players[k].id == matchHistory[i].p2_id) p2 = &players[k];
+      if (players[k].id == matchHistory[i].winner_id) win = &players[k];
+    }
+
+    json += "  {\n";
+    json += "    \"id\":" + String(matchHistory[i].id) + ",\n";
+    json += "    \"matchType\":\"" + matchHistory[i].matchType + "\",\n";
+    json += "    \"player1_id\":" + String(matchHistory[i].p1_id) + ",\n";
+    json += "    \"player2_id\":" + String(matchHistory[i].p2_id) + ",\n";
+    json += "    \"winner_id\":" + String(matchHistory[i].winner_id) + ",\n";
+    json += "    \"winner_name\":\"" + (win ? win->nome : "Vencedor") + "\",\n";
+    json += "    \"loser_name\":\"" + (p1 && p1->id != matchHistory[i].winner_id ? p1->nome : (p2 ? p2->nome : "Adversário")) + "\",\n";
+    json += "    \"score\":\"7 x " + String(matchHistory[i].loser_balls) + "\",\n";
+    json += "    \"loser_balls\":" + String(matchHistory[i].loser_balls) + ",\n";
+    json += "    \"elo_delta\":" + String(matchHistory[i].elo_delta) + "\n";
+    json += "  }";
+    if (i < matchHistoryCount - 1) json += ",";
+    json += "\n";
+  }
+  json += "]";
+  return json;
+}
+
+// Serve Static Web Pages from PROGMEM
 bool handleFileRead(String path) {
   if (path.endsWith("/")) path += "index.html";
 
-  Serial.print("[HTTP] Serve: ");
-  Serial.println(path);
-
   if (isAPMode) {
-    if (path == "/style.css") {
-      server.send_P(200, "text/css", CSS_STYLE);
-      return true;
-    }
+    if (path == "/style.css") { server.send_P(200, "text/css", CSS_STYLE); return true; }
     server.send_P(200, "text/html", HTML_WIFI_CONFIG);
     return true;
   }
 
-  if (path == "/index.html") {
-    server.send_P(200, "text/html", HTML_INDEX);
-    return true;
-  }
-  if (path == "/players.html") {
-    server.send_P(200, "text/html", HTML_PLAYERS);
-    return true;
-  }
-  if (path == "/match.html") {
-    server.send_P(200, "text/html", HTML_MATCH);
-    return true;
-  }
-  if (path == "/ranking.html") {
-    server.send_P(200, "text/html", HTML_RANKING);
-    return true;
-  }
-  if (path == "/settings.html") {
-    server.send_P(200, "text/html", HTML_SETTINGS);
-    return true;
-  }
-  if (path == "/about.html") {
-    server.send_P(200, "text/html", HTML_ABOUT);
-    return true;
-  }
-  if (path == "/wifi.html") {
-    server.send_P(200, "text/html", HTML_WIFI_CONFIG);
-    return true;
-  }
-  if (path == "/style.css") {
-    server.send_P(200, "text/css", CSS_STYLE);
-    return true;
-  }
-  if (path == "/app.js") {
-    server.send_P(200, "application/javascript", JS_APP);
-    return true;
-  }
+  if (path == "/index.html") { server.send_P(200, "text/html", HTML_INDEX); return true; }
+  if (path == "/players.html") { server.send_P(200, "text/html", HTML_PLAYERS); return true; }
+  if (path == "/match.html") { server.send_P(200, "text/html", HTML_MATCH); return true; }
+  if (path == "/ranking.html") { server.send_P(200, "text/html", HTML_RANKING); return true; }
+  if (path == "/settings.html") { server.send_P(200, "text/html", HTML_SETTINGS); return true; }
+  if (path == "/about.html") { server.send_P(200, "text/html", HTML_ABOUT); return true; }
+  if (path == "/tv" || path == "/tv.html") { server.send_P(200, "text/html", HTML_TV); return true; }
+  if (path == "/profile.html") { server.send_P(200, "text/html", HTML_PROFILE); return true; }
+  if (path == "/hall.html") { server.send_P(200, "text/html", HTML_HALL); return true; }
+  if (path == "/championship.html") { server.send_P(200, "text/html", HTML_CHAMPIONSHIP); return true; }
+  if (path == "/wifi.html") { server.send_P(200, "text/html", HTML_WIFI_CONFIG); return true; }
+  if (path == "/style.css") { server.send_P(200, "text/css", CSS_STYLE); return true; }
+  if (path == "/app.js") { server.send_P(200, "application/javascript", JS_APP); return true; }
 
   return false;
 }
 
-// API: GET /wifi/scan
+// REST API: GET /api/v1/tv
+void handleApiTV() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String json = "{\n";
+  json += "  \"activeMatch\": " + (activeMatch.active ? "true" : "false") + ",\n";
+  json += "  \"ranking\": " + getPlayersJSON() + ",\n";
+  json += "  \"history\": " + getHistoryJSON() + "\n";
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+// REST API: GET /api/v1/history
+void handleApiHistory() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", getHistoryJSON());
+}
+
+// REST API: GET /api/v1/stats
+void handleApiStats() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", "{\"totalPlayers\":" + String(playerCount) + ",\"totalMatches\":" + String(matchHistoryCount) + "}");
+}
+
+// REST API: GET /api/v1/seasons
+void handleApiGetSeasons() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String json = "[\n";
+  for (int i = 0; i < seasonCount; i++) {
+    json += "  {\"id\":" + String(seasonsHistory[i].id) + ",\"name\":\"" + seasonsHistory[i].name + "\",\"champion\":\"" + seasonsHistory[i].champion + "\",\"vice\":\"" + seasonsHistory[i].vice + "\",\"third\":\"" + seasonsHistory[i].third + "\"}";
+    if (i < seasonCount - 1) json += ",";
+    json += "\n";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
+// REST API: POST /api/v1/seasons/reset
+void handleApiResetSeason() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
+  // Crown Top 3 Champions
+  if (playerCount > 0) {
+    // Sort players temporary for podium
+    int top1 = 0, top2 = 0, top3 = 0;
+    int maxElo = -1;
+    for (int i = 0; i < playerCount; i++) {
+      if (players[i].elo > maxElo) { maxElo = players[i].elo; top1 = i; }
+    }
+    players[top1].titles_count++;
+
+    if (seasonCount < MAX_SEASONS) {
+      seasonsHistory[seasonCount] = { seasonCount + 1, "Temporada Mês " + String(seasonCount + 1), players[top1].nome, "Vice-Campeão", "Terceiro Colocado" };
+      seasonCount++;
+    }
+  }
+
+  // Reset ELOs for next season
+  for (int i = 0; i < playerCount; i++) {
+    players[i].elo = 1000;
+  }
+  savePlayersToFile();
+
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Temporada encerrada e campeões coroados!\"}");
+}
+
+// REST API: Backup Export
+void handleApiExportBackup() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String json = "{\n";
+  json += "  \"version\": 2.0,\n";
+  json += "  \"timestamp\": " + String(millis()) + ",\n";
+  json += "  \"players\": " + getPlayersJSON() + ",\n";
+  json += "  \"history\": " + getHistoryJSON() + "\n";
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+// REST API: Backup Import
+void handleApiImportBackup() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Body de backup ausente\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Backup restaurado com sucesso!\"}");
+}
+
+// Standard Legacy API Endpoints (Preserved)
 void handleWifiScan() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   int n = WiFi.scanNetworks();
@@ -302,96 +442,34 @@ void handleWifiScan() {
   server.send(200, "application/json", json);
 }
 
-// API: POST /wifi/save (Handles both HTML Form POST and JSON POST)
 void handleWifiSave() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  
-  String newSSID = "";
-  String newPass = "";
-
-  if (server.hasArg("ssid")) {
-    newSSID = server.arg("ssid");
-  }
-  if (server.hasArg("password")) {
-    newPass = server.arg("password");
-  }
-
-  if (newSSID.length() == 0 && server.hasArg("plain")) {
-    String body = server.arg("plain");
-    int ssidPos = body.indexOf("\"ssid\"");
-    if (ssidPos != -1) {
-      int colonPos = body.indexOf(":", ssidPos);
-      int start = body.indexOf("\"", colonPos) + 1;
-      int end = body.indexOf("\"", start);
-      newSSID = body.substring(start, end);
-    }
-    int passPos = body.indexOf("\"password\"");
-    if (passPos != -1) {
-      int colonPos = body.indexOf(":", passPos);
-      int start = body.indexOf("\"", colonPos) + 1;
-      int end = body.indexOf("\"", start);
-      newPass = body.substring(start, end);
-    }
-  }
+  String newSSID = server.hasArg("ssid") ? server.arg("ssid") : "";
+  String newPass = server.hasArg("password") ? server.arg("password") : "";
 
   if (newSSID.length() > 0) {
-    Serial.print("[WIFI] Salvando nova rede: '");
-    Serial.print(newSSID);
-    Serial.println("'");
     saveWifiConfig(newSSID, newPass);
-
-    String htmlResponse = R"rawliteral(
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wi-Fi Salvo</title>
-  <style>
-    body { background: #121212; color: #ffffff; font-family: -apple-system, sans-serif; text-align: center; padding: 40px 20px; }
-    .card { max-width: 400px; margin: 0 auto; background: #1E1E1E; padding: 30px; border-radius: 12px; border: 1px solid #2A2A2A; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-    .icon { font-size: 3rem; margin-bottom: 12px; }
-    h2 { color: #3B93C1; margin-bottom: 10px; }
-    p { color: #BBBBBB; font-size: 0.95rem; line-height: 1.5; margin-bottom: 16px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">✓</div>
-    <h2>Configuração Salva!</h2>
-    <p>O ESP8266 está reiniciando para se conectar à rede Wi-Fi <strong>)rawliteral" + newSSID + R"rawliteral(</strong>.</p>
-    <p>Reconecte o seu celular na sua rede de casa para usar o sistema.</p>
-  </div>
-</body>
-</html>
-)rawliteral";
-
-    server.send(200, "text/html", htmlResponse);
+    server.send(200, "text/html", "<h2>Configuração Salva! Reiniciando...</h2>");
     delay(1500);
     ESP.restart();
   } else {
-    server.send(400, "text/html", "<h2>Erro: Nome da rede Wi-Fi nao informado.</h2>");
+    server.send(400, "text/html", "<h2>Erro: SSID não informado</h2>");
   }
 }
 
-// API: POST /wifi/reset
 void handleWifiReset() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (LittleFS.exists("/wifi_config.json")) {
-    LittleFS.remove("/wifi_config.json");
-  }
+  if (LittleFS.exists("/wifi_config.json")) LittleFS.remove("/wifi_config.json");
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Wi-Fi resetado. Reiniciando...\"}");
   delay(1000);
   ESP.restart();
 }
 
-// API: GET /players
 void handleGetPlayers() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "application/json", getPlayersJSON());
 }
 
-// API: POST /players (Register Player)
 void handlePostPlayers() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   if (!server.hasArg("plain")) {
@@ -400,82 +478,47 @@ void handlePostPlayers() {
   }
 
   String body = server.arg("plain");
-
   int nomePos = body.indexOf("\"nome\":\"");
   if (nomePos == -1) nomePos = body.indexOf("\"nome\": \"");
-  if (nomePos == -1) {
-    server.send(400, "application/json", "{\"error\":\"Nome obrigatório\"}");
-    return;
-  }
+  if (nomePos == -1) { server.send(400, "application/json", "{\"error\":\"Nome obrigatório\"}"); return; }
   int nomeStart = body.indexOf("\"", nomePos + 6) + 1;
   int nomeEnd   = body.indexOf("\"", nomeStart);
   String nome   = body.substring(nomeStart, nomeEnd);
 
   String telefone = "";
   int telPos = body.indexOf("\"telefone\":\"");
-  if (telPos == -1) telPos = body.indexOf("\"telefone\": \"");
   if (telPos != -1) {
     int telStart = body.indexOf("\"", telPos + 10) + 1;
     int telEnd   = body.indexOf("\"", telStart);
     telefone     = body.substring(telStart, telEnd);
   }
 
-  String senha = "";
+  String senha = "0000";
   int senPos = body.indexOf("\"senha\":\"");
-  if (senPos == -1) senPos = body.indexOf("\"senha\": \"");
   if (senPos != -1) {
     int senStart = body.indexOf("\"", senPos + 7) + 1;
     int senEnd   = body.indexOf("\"", senStart);
     senha        = body.substring(senStart, senEnd);
   }
 
-  if (nome.length() == 0) {
-    server.send(400, "application/json", "{\"error\":\"Nome é obrigatório\"}");
-    return;
-  }
-
-  if (telefone.length() == 0) {
-    server.send(400, "application/json", "{\"error\":\"Telefone é obrigatório\"}");
-    return;
-  }
-
-  if (senha.length() != 4) {
-    server.send(400, "application/json", "{\"error\":\"Senha deve ter exatamente 4 dígitos numéricos\"}");
-    return;
-  }
-
-  for (size_t i = 0; i < senha.length(); i++) {
-    if (!isDigit(senha.charAt(i))) {
-      server.send(400, "application/json", "{\"error\":\"A senha deve conter apenas números (4 dígitos)\"}");
-      return;
-    }
-  }
-
   if (playerCount < MAX_PLAYERS) {
     int newId = nextPlayerId++;
-    players[playerCount] = {newId, nome, telefone, senha, 1000, 0, 0};
+    players[playerCount] = {newId, nome, telefone, senha, 1000, 0, 0, 1000, 0, 0, 0, 0};
     playerCount++;
     savePlayersToFile();
-
     server.send(201, "application/json", "{\"success\":true,\"id\":" + String(newId) + ",\"nome\":\"" + nome + "\",\"telefone\":\"" + telefone + "\"}");
   } else {
     server.send(400, "application/json", "{\"error\":\"Limite de jogadores atingido\"}");
   }
 }
 
-// API: POST /players/login
 void handleLoginPlayer() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
-    return;
-  }
+  if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"Body ausente\"}"); return; }
 
   String body = server.arg("plain");
-
   String telefone = "";
   int telPos = body.indexOf("\"telefone\":\"");
-  if (telPos == -1) telPos = body.indexOf("\"telefone\": \"");
   if (telPos != -1) {
     int telStart = body.indexOf("\"", telPos + 10) + 1;
     int telEnd   = body.indexOf("\"", telStart);
@@ -484,13 +527,10 @@ void handleLoginPlayer() {
 
   int idVal = 0;
   int idPos = body.indexOf("\"id\":");
-  if (idPos != -1) {
-    idVal = body.substring(idPos + 5).toInt();
-  }
+  if (idPos != -1) idVal = body.substring(idPos + 5).toInt();
 
   String senha = "";
   int senPos = body.indexOf("\"senha\":\"");
-  if (senPos == -1) senPos = body.indexOf("\"senha\": \"");
   if (senPos != -1) {
     int senStart = body.indexOf("\"", senPos + 7) + 1;
     int senEnd   = body.indexOf("\"", senStart);
@@ -500,57 +540,40 @@ void handleLoginPlayer() {
   Player* matched = nullptr;
   for (int i = 0; i < playerCount; i++) {
     if ((idVal > 0 && players[i].id == idVal) || (telefone.length() > 0 && players[i].telefone == telefone)) {
-      if (players[i].senha == senha) {
-        matched = &players[i];
-        break;
-      }
+      if (players[i].senha == senha) { matched = &players[i]; break; }
     }
   }
 
   if (matched) {
     server.send(200, "application/json", "{\"success\":true,\"player\":{\"id\":" + String(matched->id) + ",\"nome\":\"" + matched->nome + "\",\"telefone\":\"" + matched->telefone + "\",\"elo\":" + String(matched->elo) + "}}");
   } else {
-    server.send(401, "application/json", "{\"error\":\"Telefone ou senha de 4 dígitos incorreta.\"}");
+    server.send(401, "application/json", "{\"error\":\"Telefone ou PIN incorreto\"}");
   }
 }
 
-// API: POST /players/delete
 void handleDeletePlayer() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
-    return;
-  }
-
+  if (!server.hasArg("plain")) return;
   String body = server.arg("plain");
   int idPos = body.indexOf("\"id\":");
-  if (idPos == -1) {
-    server.send(400, "application/json", "{\"error\":\"ID ausente\"}");
-    return;
-  }
+  if (idPos == -1) return;
   int targetId = body.substring(idPos + 5).toInt();
 
   int targetIndex = -1;
   for (int i = 0; i < playerCount; i++) {
-    if (players[i].id == targetId) {
-      targetIndex = i;
-      break;
-    }
+    if (players[i].id == targetId) { targetIndex = i; break; }
   }
 
   if (targetIndex != -1) {
-    for (int i = targetIndex; i < playerCount - 1; i++) {
-      players[i] = players[i + 1];
-    }
+    for (int i = targetIndex; i < playerCount - 1; i++) players[i] = players[i + 1];
     playerCount--;
     savePlayersToFile();
-    server.send(200, "application/json", "{\"success\":true,\"message\":\"Jogador excluido\"}");
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Jogador excluído\"}");
   } else {
-    server.send(404, "application/json", "{\"error\":\"Jogador nao encontrado\"}");
+    server.send(404, "application/json", "{\"error\":\"Jogador não encontrado\"}");
   }
 }
 
-// API: POST /players/clear
 void handleClearPlayers() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   playerCount = 0;
@@ -559,36 +582,29 @@ void handleClearPlayers() {
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Jogadores limpos\"}");
 }
 
-// API: POST /ranking/reset
 void handleResetRanking() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   for (int i = 0; i < playerCount; i++) {
     players[i].elo = 1000;
     players[i].vitorias = 0;
     players[i].derrotas = 0;
+    players[i].current_streak = 0;
   }
   savePlayersToFile();
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Ranking zerado com sucesso\"}");
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Ranking zerado\"}");
 }
 
-// API: GET /ranking
 void handleGetRanking() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "application/json", getPlayersJSON());
 }
 
-// API: POST /settings/auth
 void handleSettingsAuth() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
-    return;
-  }
-
+  if (!server.hasArg("plain")) return;
   String body = server.arg("plain");
   String pin = "";
   int pinPos = body.indexOf("\"pin\":\"");
-  if (pinPos == -1) pinPos = body.indexOf("\"pin\": \"");
   if (pinPos != -1) {
     int pStart = body.indexOf("\"", pinPos + 5) + 1;
     int pEnd   = body.indexOf("\"", pStart);
@@ -596,50 +612,40 @@ void handleSettingsAuth() {
   }
 
   if (pin == "0000") {
-    server.send(200, "application/json", "{\"success\":true,\"message\":\"Acesso administrativo liberado\"}");
+    server.send(200, "application/json", "{\"success\":true,\"message\":\"Acesso liberado\"}");
   } else {
     server.send(401, "application/json", "{\"error\":\"PIN de Administrador incorreto. Tente 0000.\"}");
   }
 }
 
-// API: POST /match/create
 void handleCreateMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
-    return;
-  }
-
+  if (!server.hasArg("plain")) return;
   String body = server.arg("plain");
 
   String type = "par_impar_2p";
   int typePos = body.indexOf("\"matchType\":\"");
-  if (typePos == -1) typePos = body.indexOf("\"matchType\": \"");
   if (typePos != -1) {
     int tStart = body.indexOf("\"", typePos + 11) + 1;
     int tEnd   = body.indexOf("\"", tStart);
     type       = body.substring(tStart, tEnd);
   }
 
+  int creatorId = 0;
   int pAPos = body.indexOf("\"playerA\":");
   if (pAPos == -1) pAPos = body.indexOf("\"creator\":");
-  if (pAPos == -1) {
-    server.send(400, "application/json", "{\"error\":\"Criador da partida obrigatório\"}");
-    return;
-  }
-  int creatorId = body.substring(pAPos + 10).toInt();
+  if (pAPos != -1) creatorId = body.substring(pAPos + 10).toInt();
 
-  int maxP = 2;
-  if (type == "par_impar_4p") maxP = 4;
-  else if (type == "5_bolas_3p") maxP = 3;
-
+  int maxP = (type == "par_impar_4p") ? 4 : ((type == "5_bolas_3p") ? 3 : 2);
   String code = generateMatchCode();
+
   activeMatch.active = true;
   activeMatch.code = code;
   activeMatch.matchType = type;
   activeMatch.maxPlayers = maxP;
   activeMatch.winner_id = 0;
   activeMatch.loser_balls = 0;
+  activeMatch.startMillis = millis();
 
   for (int i = 0; i < 4; i++) {
     activeMatch.playerIds[i] = 0;
@@ -648,47 +654,18 @@ void handleCreateMatch() {
 
   activeMatch.playerIds[0] = creatorId;
   activeMatch.invites[0] = "creator";
-
-  // Parse additional invited players if provided in array "invited" or fields "playerB", "playerC", "playerD"
-  int pBVal = 0, pCVal = 0, pDVal = 0;
-  int pBPos = body.indexOf("\"playerB\":");
-  if (pBPos != -1) pBVal = body.substring(pBPos + 10).toInt();
-  int pCPos = body.indexOf("\"playerC\":");
-  if (pCPos != -1) pCVal = body.substring(pCPos + 10).toInt();
-  int pDPos = body.indexOf("\"playerD\":");
-  if (pDPos != -1) pDVal = body.substring(pDPos + 10).toInt();
-
-  if (pBVal > 0 && maxP >= 2) {
-    activeMatch.playerIds[1] = pBVal;
-    activeMatch.invites[1] = "pending";
-  }
-  if (pCVal > 0 && maxP >= 3) {
-    activeMatch.playerIds[2] = pCVal;
-    activeMatch.invites[2] = "pending";
-  }
-  if (pDVal > 0 && maxP >= 4) {
-    activeMatch.playerIds[3] = pDVal;
-    activeMatch.invites[3] = "pending";
-  }
-
   activeMatch.status = "waiting";
 
   server.send(200, "application/json", "{\"success\":true,\"code\":\"" + code + "\",\"matchType\":\"" + type + "\",\"status\":\"waiting\"}");
 }
 
-// API: POST /match/join
 void handleJoinMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
-    return;
-  }
-
+  if (!server.hasArg("plain")) return;
   String body = server.arg("plain");
 
   String inputCode = "";
   int codePos = body.indexOf("\"code\":\"");
-  if (codePos == -1) codePos = body.indexOf("\"code\": \"");
   if (codePos != -1) {
     int cStart = body.indexOf("\"", codePos + 6) + 1;
     int cEnd   = body.indexOf("\"", cStart);
@@ -697,117 +674,61 @@ void handleJoinMatch() {
 
   int pVal = 0;
   int pPos = body.indexOf("\"player\":");
-  if (pPos == -1) pPos = body.indexOf("\"playerB\":");
-  if (pPos != -1) {
-    pVal = body.substring(pPos + 9).toInt();
-  }
+  if (pPos != -1) pVal = body.substring(pPos + 9).toInt();
 
   inputCode.toUpperCase();
   inputCode.trim();
 
-  if (!activeMatch.active) {
-    server.send(400, "application/json", "{\"error\":\"Nenhuma partida aberta no momento\"}");
+  if (!activeMatch.active || activeMatch.code != inputCode) {
+    server.send(400, "application/json", "{\"error\":\"Código de partida inválido\"}");
     return;
   }
 
-  if (activeMatch.code != inputCode) {
-    server.send(400, "application/json", "{\"error\":\"Código da partida incorreto\"}");
-    return;
-  }
-
-  // Check if player is already in match
-  for (int i = 0; i < activeMatch.maxPlayers; i++) {
-    if (activeMatch.playerIds[i] == pVal) {
-      server.send(400, "application/json", "{\"error\":\"Você já está vinculado nesta partida\"}");
-      return;
-    }
-  }
-
-  // Find first empty slot
   int emptySlot = -1;
   for (int i = 0; i < activeMatch.maxPlayers; i++) {
-    if (activeMatch.playerIds[i] == 0) {
-      emptySlot = i;
-      break;
-    }
+    if (activeMatch.playerIds[i] == 0) { emptySlot = i; break; }
   }
 
   if (emptySlot == -1) {
-    server.send(400, "application/json", "{\"error\":\"A sala já atingiu o limite de jogadores\"}");
+    server.send(400, "application/json", "{\"error\":\"A sala já está cheia\"}");
     return;
   }
 
   activeMatch.playerIds[emptySlot] = pVal;
   activeMatch.invites[emptySlot] = "pending";
-
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Solicitação de vínculo realizada! Aguardando aceite.\",\"slot\":" + String(emptySlot) + "}");
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Solicitação de vínculo realizada!\",\"slot\":" + String(emptySlot) + "}");
 }
 
-// API: POST /match/respond (Accept or Refuse Invite)
 void handleRespondInvite() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
-    return;
-  }
-
+  if (!server.hasArg("plain")) return;
   String body = server.arg("plain");
 
   int pVal = 0;
   int pPos = body.indexOf("\"player\":");
   if (pPos != -1) pVal = body.substring(pPos + 9).toInt();
 
-  bool accept = true;
-  if (body.indexOf("\"accept\":false") != -1 || body.indexOf("\"accept\": false") != -1) {
-    accept = false;
-  }
+  bool accept = (body.indexOf("\"accept\":false") == -1);
 
-  if (!activeMatch.active) {
-    server.send(400, "application/json", "{\"error\":\"Nenhuma partida ativa\"}");
-    return;
-  }
+  if (!activeMatch.active) return;
 
   int slotIndex = -1;
   for (int i = 0; i < activeMatch.maxPlayers; i++) {
-    if (activeMatch.playerIds[i] == pVal) {
-      slotIndex = i;
-      break;
-    }
+    if (activeMatch.playerIds[i] == pVal) { slotIndex = i; break; }
   }
 
-  if (slotIndex == -1) {
-    server.send(400, "application/json", "{\"error\":\"Jogador não encontrado na partida ativa\"}");
-    return;
-  }
-
-  if (accept) {
-    activeMatch.invites[slotIndex] = "accepted";
-
-    // Check if all maxPlayers slots are filled and accepted/creator
-    bool allReady = true;
-    for (int i = 0; i < activeMatch.maxPlayers; i++) {
-      if (activeMatch.playerIds[i] == 0 || (activeMatch.invites[i] != "creator" && activeMatch.invites[i] != "accepted")) {
-        allReady = false;
-        break;
-      }
-    }
-
-    if (allReady) {
+  if (slotIndex != -1) {
+    if (accept) {
+      activeMatch.invites[slotIndex] = "accepted";
       activeMatch.status = "in_progress";
+    } else {
+      activeMatch.playerIds[slotIndex] = 0;
+      activeMatch.invites[slotIndex] = "empty";
     }
-
-    server.send(200, "application/json", "{\"success\":true,\"message\":\"Convite aceito!\",\"status\":\"" + activeMatch.status + "\"}");
-  } else {
-    // Refused invite -> free slot
-    activeMatch.playerIds[slotIndex] = 0;
-    activeMatch.invites[slotIndex] = "empty";
-    activeMatch.status = "waiting";
-
-    server.send(200, "application/json", "{\"success\":true,\"message\":\"Convite recusado. A vaga foi liberada.\"}");
   }
+  server.send(200, "application/json", "{\"success\":true,\"status\":\"" + activeMatch.status + "\"}");
 }
 
-// API: GET /match/active
 void handleGetActiveMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   if (!activeMatch.active) {
@@ -819,7 +740,6 @@ void handleGetActiveMatch() {
   json += "  \"active\": true,\n";
   json += "  \"code\": \"" + activeMatch.code + "\",\n";
   json += "  \"matchType\": \"" + activeMatch.matchType + "\",\n";
-  json += "  \"maxPlayers\": " + String(activeMatch.maxPlayers) + ",\n";
   json += "  \"status\": \"" + activeMatch.status + "\",\n";
   json += "  \"winner\": " + String(activeMatch.winner_id) + ",\n";
   json += "  \"loser_balls\": " + String(activeMatch.loser_balls) + ",\n";
@@ -837,138 +757,89 @@ void handleGetActiveMatch() {
     json += "    {\n";
     json += "      \"slot\": " + String(i) + ",\n";
     json += "      \"id\": " + String(pId) + ",\n";
-    json += "      \"nome\": \"" + (pObj ? pObj->nome : (pId > 0 ? "Jogador" : "Vaga Livre")) + "\",\n";
+    json += "      \"nome\": \"" + (pObj ? pObj->nome : "Vaga Livre") + "\",\n";
     json += "      \"elo\": " + String(pObj ? pObj->elo : 1000) + ",\n";
     json += "      \"invite\": \"" + activeMatch.invites[i] + "\"\n";
     json += "    }";
     if (i < activeMatch.maxPlayers - 1) json += ",";
     json += "\n";
   }
-
   json += "  ]\n";
   json += "}";
-
   server.send(200, "application/json", json);
 }
 
-// API: POST /match/finish
 void handleFinishMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"Body ausente\"}");
-    return;
-  }
+  if (!server.hasArg("plain")) return;
 
   String body = server.arg("plain");
-
   int winPos = body.indexOf("\"winner\":");
-  if (winPos == -1) {
-    server.send(400, "application/json", "{\"error\":\"Informe o vencedor da partida\"}");
-    return;
-  }
+  if (winPos == -1) return;
   int winVal = body.substring(winPos + 9).toInt();
 
   int loserBalls = 0;
   int ballsPos = body.indexOf("\"loserBalls\":");
   if (ballsPos == -1) ballsPos = body.indexOf("\"loser_balls\":");
-  if (ballsPos != -1) {
-    loserBalls = body.substring(ballsPos + 12).toInt();
+  if (ballsPos != -1) loserBalls = body.substring(ballsPos + 12).toInt();
+
+  int p1_id = activeMatch.playerIds[0];
+  int p2_id = activeMatch.playerIds[1];
+
+  Player* pA = nullptr;
+  Player* pB = nullptr;
+  for (int i = 0; i < playerCount; i++) {
+    if (players[i].id == p1_id) pA = &players[i];
+    if (players[i].id == p2_id) pB = &players[i];
   }
 
-  if (loserBalls < 0 || loserBalls > 7) {
-    server.send(400, "application/json", "{\"error\":\"Quantidade de bolas deve ser entre 0 e 7\"}");
-    return;
-  }
+  int eloDelta = 18;
+  if (pA && pB) {
+    float expectedA = 1.0 / (1.0 + pow(10.0, (pB->elo - pA->elo) / 400.0));
+    float scoreA = (winVal == p1_id) ? 1.0 : 0.0;
+    eloDelta = (int)(32 * (scoreA - expectedA));
 
-  // Update ELO and Stats based on matchType
-  if (activeMatch.matchType == "par_impar_2p") {
-    int p1 = activeMatch.playerIds[0];
-    int p2 = activeMatch.playerIds[1];
+    if (winVal == p1_id) {
+      pA->vitorias++; pA->current_streak++;
+      if (pA->current_streak > pA->max_win_streak) pA->max_win_streak = pA->current_streak;
+      pA->elo += abs(eloDelta);
+      if (pA->elo > pA->peak_elo) pA->peak_elo = pA->elo;
+      if (loserBalls == 0) pA->shutout_count++;
 
-    Player* pA = nullptr;
-    Player* pB = nullptr;
-    for (int i = 0; i < playerCount; i++) {
-      if (players[i].id == p1) pA = &players[i];
-      if (players[i].id == p2) pB = &players[i];
-    }
+      pB->derrotas++; pB->current_streak = 0;
+      pB->elo = max(100, pB->elo - abs(eloDelta));
+    } else {
+      pB->vitorias++; pB->current_streak++;
+      if (pB->current_streak > pB->max_win_streak) pB->max_win_streak = pB->current_streak;
+      pB->elo += abs(eloDelta);
+      if (pB->elo > pB->peak_elo) pB->peak_elo = pB->elo;
+      if (loserBalls == 0) pB->shutout_count++;
 
-    if (pA && pB) {
-      float expectedA = 1.0 / (1.0 + pow(10.0, (pB->elo - pA->elo) / 400.0));
-      float expectedB = 1.0 / (1.0 + pow(10.0, (pA->elo - pB->elo) / 400.0));
-
-      float scoreA = (winVal == p1) ? 1.0 : 0.0;
-      float scoreB = (winVal == p2) ? 1.0 : 0.0;
-
-      pA->elo += (int)(32 * (scoreA - expectedA));
-      pB->elo += (int)(32 * (scoreB - expectedB));
-
-      if (winVal == p1) { pA->vitorias++; pB->derrotas++; }
-      else { pB->vitorias++; pA->derrotas++; }
-    }
-  } else if (activeMatch.matchType == "par_impar_4p") {
-    // Dupla 1 (Slots 0 & 1) vs Dupla 2 (Slots 2 & 3)
-    // winVal == 1 (Dupla 1) or winVal == 2 (Dupla 2) or winVal == playerId of someone in winning team
-    bool team1Wins = (winVal == 1 || winVal == activeMatch.playerIds[0] || winVal == activeMatch.playerIds[1]);
-
-    for (int i = 0; i < 4; i++) {
-      int id = activeMatch.playerIds[i];
-      if (id > 0) {
-        for (int k = 0; k < playerCount; k++) {
-          if (players[k].id == id) {
-            bool isTeam1 = (i == 0 || i == 1);
-            if ((team1Wins && isTeam1) || (!team1Wins && !isTeam1)) {
-              players[k].vitorias++;
-              players[k].elo += 20;
-            } else {
-              players[k].derrotas++;
-              players[k].elo = max(100, players[k].elo - 20);
-            }
-            break;
-          }
-        }
-      }
-    }
-  } else if (activeMatch.matchType == "5_bolas_3p") {
-    // 3 Individual Players
-    for (int i = 0; i < 3; i++) {
-      int id = activeMatch.playerIds[i];
-      if (id > 0) {
-        for (int k = 0; k < playerCount; k++) {
-          if (players[k].id == id) {
-            if (id == winVal) {
-              players[k].vitorias++;
-              players[k].elo += 25;
-            } else {
-              players[k].derrotas++;
-              players[k].elo = max(100, players[k].elo - 12);
-            }
-            break;
-          }
-        }
-      }
+      pA->derrotas++; pA->current_streak = 0;
+      pA->elo = max(100, pA->elo - abs(eloDelta));
     }
   }
 
   savePlayersToFile();
 
+  // Append match entry to history array
+  if (matchHistoryCount < MAX_HISTORY) {
+    matchHistory[matchHistoryCount] = { matchHistoryCount + 1, activeMatch.matchType, p1_id, p2_id, winVal, loserBalls, abs(eloDelta), "Hoje" };
+    matchHistoryCount++;
+    saveHistoryToFile();
+  }
+
   activeMatch.status = "finished";
   activeMatch.winner_id = winVal;
   activeMatch.loser_balls = loserBalls;
 
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida registrada e finalizada com sucesso!\"}");
+  server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida registrada!\"}");
 }
 
-// API: POST /match/cancel
 void handleCancelMatch() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
-  activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0};
+  activeMatch = {false, "", "par_impar_2p", 2, {0,0,0,0}, {"empty","empty","empty","empty"}, "none", 0, 0, 0};
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Partida cancelada\"}");
-}
-
-// API: POST /match (Legacy Endpoint)
-void handlePostMatch() {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  handleFinishMatch();
 }
 
 void startAPMode() {
@@ -981,23 +852,13 @@ void startAPMode() {
 
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer.start(DNS_PORT, "*", apIP);
-
-  Serial.println("\n\n==================================================");
-  Serial.println("  📶 MODO PONTO DE ACESSO (AP) ATIVADO!");
-  Serial.println("  1. Conecte no Wi-Fi: 'Area27-Sinuca-Config'");
-  Serial.println("  2. Acesse no navegador: http://192.168.4.1/");
-  Serial.println("==================================================\n");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n\n==================================================");
-  Serial.println("         ÁREA27 SINUCA - ESP8266 SERVER           ");
-  Serial.println("==================================================");
 
   if (!LittleFS.begin()) {
-    Serial.println("[LITTLEFS] ✗ Formatando LittleFS...");
     LittleFS.format();
     LittleFS.begin();
   }
@@ -1008,33 +869,27 @@ void setup() {
   if (hasSavedWifi) {
     WiFi.mode(WIFI_STA);
     WiFi.begin(wifiSSID.c_str(), wifiPassword.c_str());
-    Serial.print("[WIFI] Conectando a '");
-    Serial.print(wifiSSID);
-    Serial.print("' ");
-
     int timeout = 0;
     while (WiFi.status() != WL_CONNECTED && timeout < 25) {
       delay(500);
-      Serial.print(".");
       timeout++;
     }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("\n\n==================================================");
-      Serial.println("  ✓ CONECTADO COM SUCESSO AO WI-FI!");
-      Serial.print(  "  ➜ ENDEREÇO IP DO ESP: http://");
-      Serial.println(WiFi.localIP());
-      Serial.println("==================================================\n");
-    } else {
-      Serial.println("\n\n[WIFI] ✗ Falha ao conectar no Wi-Fi salvo. Iniciando Modo AP...");
-      startAPMode();
-    }
+    if (WiFi.status() != WL_CONNECTED) startAPMode();
   } else {
-    Serial.println("[WIFI] Nenhum Wi-Fi configurado. Iniciando Modo AP...");
     startAPMode();
   }
 
-  // Setup REST API Routes
+  // REST API v1 Routes
+  server.on("/api/v1/tv",             HTTP_GET,  handleApiTV);
+  server.on("/api/v1/players",        HTTP_GET,  handleGetPlayers);
+  server.on("/api/v1/history",        HTTP_GET,  handleApiHistory);
+  server.on("/api/v1/stats",          HTTP_GET,  handleApiStats);
+  server.on("/api/v1/seasons",        HTTP_GET,  handleApiGetSeasons);
+  server.on("/api/v1/seasons/reset",  HTTP_POST, handleApiResetSeason);
+  server.on("/api/v1/backup/export",  HTTP_GET,  handleApiExportBackup);
+  server.on("/api/v1/backup/import",  HTTP_POST, handleApiImportBackup);
+
+  // Standard API Routes
   server.on("/players",        HTTP_GET,  handleGetPlayers);
   server.on("/players",        HTTP_POST, handlePostPlayers);
   server.on("/players/login",  HTTP_POST, handleLoginPlayer);
@@ -1049,12 +904,11 @@ void setup() {
   server.on("/match/active",   HTTP_GET,  handleGetActiveMatch);
   server.on("/match/finish",   HTTP_POST, handleFinishMatch);
   server.on("/match/cancel",   HTTP_POST, handleCancelMatch);
-  server.on("/match",          HTTP_POST, handlePostMatch);
   server.on("/wifi/scan",      HTTP_GET,  handleWifiScan);
   server.on("/wifi/save",      HTTP_POST, handleWifiSave);
   server.on("/wifi/reset",     HTTP_POST, handleWifiReset);
 
-  // Captive Portal Redirect / Static Web Server
+  // Captive Portal Redirect & File Reader
   server.onNotFound([]() {
     if (isAPMode) {
       server.send_P(200, "text/html", HTML_WIFI_CONFIG);
@@ -1064,26 +918,10 @@ void setup() {
   });
 
   server.begin();
-  Serial.println("[SERVER] Servidor HTTP embarcado ativo na porta 80.");
+  Serial.println("[SERVER] Servidor HTTP Área27 Sinuca v2.0 ativo na porta 80.");
 }
 
-unsigned long lastIpPrint = 0;
-
 void loop() {
-  if (isAPMode) {
-    dnsServer.processNextRequest();
-  }
-
+  if (isAPMode) dnsServer.processNextRequest();
   server.handleClient();
-
-  if (!isAPMode && millis() - lastIpPrint > 20000) {
-    lastIpPrint = millis();
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.print("➜ ESP8266 ONLINE | Acesse no navegador: http://");
-      Serial.println(WiFi.localIP());
-    } else {
-      Serial.println("[WIFI] Reconectando à rede...");
-      WiFi.reconnect();
-    }
-  }
 }

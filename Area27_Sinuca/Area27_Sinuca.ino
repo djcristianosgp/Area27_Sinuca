@@ -11,6 +11,8 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
+#include <ESP8266mDNS.h>
+#include <ESP8266NetBIOS.h>
 #include <LittleFS.h>
 #include "WebPages.h"
 
@@ -874,7 +876,15 @@ void setup() {
       delay(500);
       timeout++;
     }
-    if (WiFi.status() != WL_CONNECTED) startAPMode();
+    if (WiFi.status() == WL_CONNECTED) {
+      if (MDNS.begin("sinuca")) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.println("[mDNS] Servidor mDNS ativo! Acesse: http://sinuca.local");
+      }
+      NBNS.begin("sinuca");
+    } else {
+      startAPMode();
+    }
   } else {
     startAPMode();
   }
@@ -922,6 +932,10 @@ void setup() {
 }
 
 void loop() {
-  if (isAPMode) dnsServer.processNextRequest();
+  if (isAPMode) {
+    dnsServer.processNextRequest();
+  } else {
+    MDNS.update();
+  }
   server.handleClient();
 }

@@ -987,6 +987,54 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+function initAboutPage() {
+  const btnCheck = document.getElementById('btn-about-check-update');
+  const btnStart = document.getElementById('btn-about-start-update');
+  const statusEl = document.getElementById('about-update-status');
+  let latestUrl = '';
+
+  if (btnCheck) {
+    btnCheck.addEventListener('click', async () => {
+      btnCheck.disabled = true;
+      btnCheck.textContent = '⏳ Verificando...';
+      try {
+        const res = await API.checkUpdate();
+        btnCheck.disabled = false;
+        btnCheck.textContent = '🔍 Buscar Atualizações';
+        if (res.update_available) {
+          latestUrl = res.firmware_url;
+          if (statusEl) {
+            statusEl.innerHTML = `<span style="color: #4ade80; font-weight:700;">✨ Nova versão ${escapeHtml(res.latest_version)} disponível no GitHub!</span><br><small style="color: #94a3b8;">${escapeHtml(res.changelog || '')}</small>`;
+          }
+          if (btnStart) btnStart.classList.remove('hidden');
+        } else {
+          if (statusEl) {
+            statusEl.innerHTML = `<span style="color: #38bdf8;">✅ Seu sistema já está na versão mais recente (${escapeHtml(res.current_version)}).</span>`;
+          }
+          if (btnStart) btnStart.classList.add('hidden');
+        }
+      } catch (err) {
+        btnCheck.disabled = false;
+        btnCheck.textContent = '🔍 Buscar Atualizações';
+        if (statusEl) statusEl.textContent = 'Erro ao conectar ao GitHub. Verifique a conexão Wi-Fi.';
+      }
+    });
+  }
+
+  if (btnStart) {
+    btnStart.addEventListener('click', async () => {
+      if (confirm('Confirma a atualização automática via GitHub? O ESP8266 irá reiniciar em instantes.')) {
+        try {
+          btnStart.disabled = true;
+          btnStart.textContent = '⏳ Atualizando...';
+          await API.startUpdate({ url: latestUrl });
+          showToast('Atualização iniciada! O sistema irá reiniciar...', 'success');
+        } catch (err) {}
+      }
+    });
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   renderUserHeaderStatus();
   if (document.getElementById('tv-clock')) initTVDashboard();
@@ -996,4 +1044,5 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('form-player') || document.getElementById('form-login')) initPlayersPage();
   if (document.getElementById('ranking-container')) initRankingPage();
   if (document.getElementById('admin-pin-card') || document.getElementById('btn-reset-wifi')) initSettingsPage();
+  if (document.getElementById('btn-about-check-update')) initAboutPage();
 });

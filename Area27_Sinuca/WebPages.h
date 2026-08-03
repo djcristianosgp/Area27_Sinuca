@@ -809,6 +809,54 @@ function initChampionshipPage() {
   }
 }
 
+function initAboutPage() {
+  const btnCheck = document.getElementById('btn-about-check-update');
+  const btnStart = document.getElementById('btn-about-start-update');
+  const statusEl = document.getElementById('about-update-status');
+  let latestUrl = '';
+
+  if (btnCheck) {
+    btnCheck.addEventListener('click', async () => {
+      btnCheck.disabled = true;
+      btnCheck.textContent = '⏳ Verificando...';
+      try {
+        const res = await API.checkUpdate();
+        btnCheck.disabled = false;
+        btnCheck.textContent = '🔍 Buscar Atualizações';
+        if (res.update_available) {
+          latestUrl = res.firmware_url;
+          if (statusEl) {
+            statusEl.innerHTML = `<span style="color: #4ade80; font-weight:700;">✨ Nova versão ${escapeHtml(res.latest_version)} disponível no GitHub!</span><br><small style="color: #94a3b8;">${escapeHtml(res.changelog || '')}</small>`;
+          }
+          if (btnStart) btnStart.classList.remove('hidden');
+        } else {
+          if (statusEl) {
+            statusEl.innerHTML = `<span style="color: #38bdf8;">✅ Seu sistema já está na versão mais recente (${escapeHtml(res.current_version)}).</span>`;
+          }
+          if (btnStart) btnStart.classList.add('hidden');
+        }
+      } catch (err) {
+        btnCheck.disabled = false;
+        btnCheck.textContent = '🔍 Buscar Atualizações';
+        if (statusEl) statusEl.textContent = 'Erro ao conectar ao GitHub. Verifique a conexão Wi-Fi.';
+      }
+    });
+  }
+
+  if (btnStart) {
+    btnStart.addEventListener('click', async () => {
+      if (confirm('Confirma a atualização automática via GitHub? O ESP8266 irá reiniciar em instantes.')) {
+        try {
+          btnStart.disabled = true;
+          btnStart.textContent = '⏳ Atualizando...';
+          await API.startUpdate({ url: latestUrl });
+          showToast('Atualização iniciada! O sistema irá reiniciar...', 'success');
+        } catch (err) {}
+      }
+    });
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   renderUserHeaderStatus();
   if (document.getElementById('players-container')) initPlayersPage();
@@ -818,6 +866,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('tv-clock')) initTVPage();
   if (document.getElementById('match-arena')) initMatchPage();
   if (document.getElementById('admin-pin-card')) initSettingsPage();
+  if (document.getElementById('btn-about-check-update')) initAboutPage();
   if (document.getElementById('champ-setup-card')) initChampionshipPage();
 });
 )rawliteral";
@@ -853,7 +902,7 @@ const char HTML_INDEX[] PROGMEM = R"rawliteral(
       <a href="settings.html" class="card-link"><div class="card card-interactive"><div class="card-icon">⚙️</div><div class="card-title">Configurações</div></div></a>
       <a href="about.html" class="card-link"><div class="card card-interactive"><div class="card-icon">ℹ️</div><div class="card-title">Sobre</div></div></a>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -891,7 +940,7 @@ const char HTML_PLAYERS[] PROGMEM = R"rawliteral(
       <div class="section-header" style="margin-bottom:10px;"><h2 class="section-title">Lista de Jogadores</h2></div>
       <div id="players-container" class="item-list"><div class="empty-state">Carregando jogadores...</div></div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -917,7 +966,7 @@ const char HTML_MATCH[] PROGMEM = R"rawliteral(
       <a href="index.html" class="back-btn">← Voltar</a>
     </header>
     <main><div id="match-arena"><div class="empty-state">Carregando dados da partida...</div></div></main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -943,7 +992,7 @@ const char HTML_RANKING[] PROGMEM = R"rawliteral(
       <a href="index.html" class="back-btn">← Voltar</a>
     </header>
     <main><div id="ranking-container" class="ranking-list"><div class="empty-state">Carregando classificação...</div></div></main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1023,7 +1072,7 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
         </div>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1049,12 +1098,30 @@ const char HTML_ABOUT[] PROGMEM = R"rawliteral(
       <a href="index.html" class="back-btn">← Voltar</a>
     </header>
     <main>
-      <div class="card">
-        <h2 style="font-size: 1.2rem; color: var(--primary); margin-bottom: 10px;">🎱 Área27 Sinuca v2.0</h2>
-        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px;">Sistema completo de gerenciamento de salão de sinuca rodando no microcontrolador ESP8266 com TV Dashboard, Perfil, Ranking ELO, Medalhas e Torneios.</p>
+      <div class="card" style="text-align: center; padding: 24px 20px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">🎱</div>
+        <h2 style="font-size: 1.4rem; font-weight: 800; margin-bottom: 4px; color: var(--primary);">Área27 Sinuca</h2>
+        <p style="color: var(--gold); font-weight: 700; font-size: 1.1rem; margin-bottom: 20px;">Versão v2.0.1</p>
+
+        <div style="background: #161616; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px; text-align: left; display: flex; flex-direction: column; gap: 10px; font-size: 0.92rem;">
+          <div><strong style="color: var(--text-muted);">Versão Instalada:</strong> <span style="color: var(--gold); font-weight:700;">v2.0.1</span></div>
+          <div><strong style="color: var(--text-muted);">Última Atualização:</strong> <span style="color: #4ade80; font-weight:700;">03/08/2026</span></div>
+          <div><strong style="color: var(--text-muted);">Plataforma:</strong> ESP8266 (Wi-Fi + LittleFS + Web Server)</div>
+          <div><strong style="color: var(--text-muted);">Desenvolvido por:</strong> Área27 Team</div>
+          <div><strong style="color: var(--text-muted);">Recursos:</strong> TV Dashboard, Ranking ELO, Medalhas, Hall da Fama, Torneios, OTA GitHub</div>
+        </div>
+
+        <div id="about-update-status" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;"></div>
+
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+          <button id="btn-about-check-update" class="btn btn-secondary" style="height:44px;">🔍 Buscar Atualizações</button>
+          <button id="btn-about-start-update" class="btn btn-primary hidden" style="height:44px; background:var(--success-color);">🚀 Atualizar Agora (GitHub)</button>
+        </div>
+
+        <a href="index.html" class="btn btn-secondary" style="text-decoration: none; height:44px; display:flex; align-items:center; justify-content:center;">Ir para a Página Inicial</a>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1178,7 +1245,7 @@ const char HTML_PROFILE[] PROGMEM = R"rawliteral(
         <button id="btn-close-qr" class="btn btn-secondary">Fechar</button>
       </div>
     </div>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1213,7 +1280,7 @@ const char HTML_HALL[] PROGMEM = R"rawliteral(
         <div id="hall-max-streak" style="font-size:1.1rem; font-weight:700;">Carregando...</div>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1251,7 +1318,7 @@ const char HTML_CHAMPIONSHIP[] PROGMEM = R"rawliteral(
         <div id="bracket-view" style="display:flex; gap:10px; overflow-x:auto; margin-top:10px;"></div>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.1</footer>
   </div>
   <script src="app.js"></script>
 </body>

@@ -641,11 +641,9 @@ void handleCheckUpdate() {
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   
   String cb = String(millis());
-  String urlsToTry[4] = {
+  String urlsToTry[2] = {
     "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/Area27_Sinuca/version.json?cb=" + cb,
-    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/version.json?cb=" + cb,
-    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/master/Area27_Sinuca/version.json?cb=" + cb,
-    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/master/version.json?cb=" + cb
+    "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/master/Area27_Sinuca/version.json?cb=" + cb
   };
 
   int httpCode = 0;

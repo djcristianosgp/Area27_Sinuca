@@ -19,7 +19,7 @@
 #include <LittleFS.h>
 #include "WebPages.h"
 
-const char* CURRENT_VERSION = "2.0.5";
+const char* CURRENT_VERSION = "2.0.6";
 const char* GITHUB_VERSION_URL = "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/version.json";
 
 // DNS Server for Captive Portal
@@ -649,7 +649,7 @@ void handleCheckUpdate() {
   int httpCode = 0;
   String payload = "";
 
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 2; i++) {
     if (http.begin(client, urlsToTry[i])) {
       httpCode = http.GET();
       if (httpCode == HTTP_CODE_OK) {

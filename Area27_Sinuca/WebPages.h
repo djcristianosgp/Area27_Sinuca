@@ -906,7 +906,7 @@ const char HTML_INDEX[] PROGMEM = R"rawliteral(
       <a href="settings.html" class="card-link"><div class="card card-interactive"><div class="card-icon">⚙️</div><div class="card-title">Configurações</div></div></a>
       <a href="about.html" class="card-link"><div class="card card-interactive"><div class="card-icon">ℹ️</div><div class="card-title">Sobre</div></div></a>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -944,7 +944,7 @@ const char HTML_PLAYERS[] PROGMEM = R"rawliteral(
       <div class="section-header" style="margin-bottom:10px;"><h2 class="section-title">Lista de Jogadores</h2></div>
       <div id="players-container" class="item-list"><div class="empty-state">Carregando jogadores...</div></div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -970,7 +970,7 @@ const char HTML_MATCH[] PROGMEM = R"rawliteral(
       <a href="index.html" class="back-btn">← Voltar</a>
     </header>
     <main><div id="match-arena"><div class="empty-state">Carregando dados da partida...</div></div></main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -996,7 +996,7 @@ const char HTML_RANKING[] PROGMEM = R"rawliteral(
       <a href="index.html" class="back-btn">← Voltar</a>
     </header>
     <main><div id="ranking-container" class="ranking-list"><div class="empty-state">Carregando classificação...</div></div></main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1062,7 +1062,7 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
             Verifique e instale automaticamente novas versões do firmware diretamente do repositório GitHub.
           </p>
           <div id="update-info-container" style="background: #1e293b; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;">
-            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.4</strong></div>
+            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.5</strong></div>
             <div id="update-status-text" style="color: var(--text-muted); margin-top: 4px;">Clique no botão abaixo para verificar se há atualizações na nuvem.</div>
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -1076,7 +1076,7 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
         </div>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1105,10 +1105,10 @@ const char HTML_ABOUT[] PROGMEM = R"rawliteral(
       <div class="card" style="text-align: center; padding: 24px 20px;">
         <div style="font-size: 3rem; margin-bottom: 12px;">🎱</div>
         <h2 style="font-size: 1.4rem; font-weight: 800; margin-bottom: 4px; color: var(--primary);">Área27 Sinuca</h2>
-        <p style="color: var(--gold); font-weight: 700; font-size: 1.1rem; margin-bottom: 20px;">Versão v2.0.4</p>
+        <p style="color: var(--gold); font-weight: 700; font-size: 1.1rem; margin-bottom: 20px;">Versão v2.0.5</p>
 
         <div style="background: #161616; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px; text-align: left; display: flex; flex-direction: column; gap: 10px; font-size: 0.92rem;">
-          <div><strong style="color: var(--text-muted);">Versão Instalada:</strong> <span style="color: var(--gold); font-weight:700;">v2.0.4</span></div>
+          <div><strong style="color: var(--text-muted);">Versão Instalada:</strong> <span style="color: var(--gold); font-weight:700;">v2.0.5</span></div>
           <div><strong style="color: var(--text-muted);">Última Atualização:</strong> <span style="color: #4ade80; font-weight:700;">03/08/2026</span></div>
           <div><strong style="color: var(--text-muted);">Plataforma:</strong> ESP8266 (Wi-Fi + LittleFS + Web Server)</div>
           <div><strong style="color: var(--text-muted);">Desenvolvido por:</strong> Área27 Team</div>
@@ -1125,7 +1125,7 @@ const char HTML_ABOUT[] PROGMEM = R"rawliteral(
         <a href="index.html" class="btn btn-secondary" style="text-decoration: none; height:44px; display:flex; align-items:center; justify-content:center;">Ir para a Página Inicial</a>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1249,7 +1249,7 @@ const char HTML_PROFILE[] PROGMEM = R"rawliteral(
         <button id="btn-close-qr" class="btn btn-secondary">Fechar</button>
       </div>
     </div>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1284,7 +1284,7 @@ const char HTML_HALL[] PROGMEM = R"rawliteral(
         <div id="hall-max-streak" style="font-size:1.1rem; font-weight:700;">Carregando...</div>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>
@@ -1322,7 +1322,7 @@ const char HTML_CHAMPIONSHIP[] PROGMEM = R"rawliteral(
         <div id="bracket-view" style="display:flex; gap:10px; overflow-x:auto; margin-top:10px;"></div>
       </div>
     </main>
-    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.4</footer>
+    <footer class="footer">Área27 Sinuca &bull; ESP8266 Edition v2.0.5</footer>
   </div>
   <script src="app.js"></script>
 </body>

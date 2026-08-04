@@ -752,6 +752,10 @@ function initSettingsPage() {
         const res = await API.checkUpdate();
         btnCheckUpdate.disabled = false;
         btnCheckUpdate.textContent = '🔍 Verificar Atualização';
+        const currentVerLabel = document.getElementById('current-ver-label');
+        if (currentVerLabel && res.current_version) {
+          currentVerLabel.textContent = 'v' + res.current_version;
+        }
         if (res.update_available) {
           latestFirmwareUrl = res.firmware_url;
           if (statusText) {
@@ -1058,7 +1062,7 @@ const char HTML_SETTINGS[] PROGMEM = R"rawliteral(
             Verifique e instale automaticamente novas versões do firmware diretamente do repositório GitHub.
           </p>
           <div id="update-info-container" style="background: #1e293b; padding: 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;">
-            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.0</strong></div>
+            <div>Versão Atual Instalada: <strong id="current-ver-label" style="color: var(--gold);">v2.0.4</strong></div>
             <div id="update-status-text" style="color: var(--text-muted); margin-top: 4px;">Clique no botão abaixo para verificar se há atualizações na nuvem.</div>
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">

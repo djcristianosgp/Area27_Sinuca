@@ -943,6 +943,10 @@ function initSettingsPage() {
         const res = await API.checkUpdate();
         btnCheckUpdate.disabled = false;
         btnCheckUpdate.textContent = '🔍 Verificar Atualização';
+        const currentVerLabel = document.getElementById('current-ver-label');
+        if (currentVerLabel && res.current_version) {
+          currentVerLabel.textContent = 'v' + res.current_version;
+        }
         if (res.update_available) {
           latestFirmwareUrl = res.firmware_url;
           if (statusText) {

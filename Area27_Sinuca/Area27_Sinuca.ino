@@ -19,7 +19,7 @@
 #include <LittleFS.h>
 #include "WebPages.h"
 
-const char* CURRENT_VERSION = "2.0.6";
+const char* CURRENT_VERSION = "2.0.7";
 const char* GITHUB_VERSION_URL = "https://raw.githubusercontent.com/djcristianosgp/Area27_Sinuca/main/version.json";
 
 // DNS Server for Captive Portal
@@ -635,6 +635,7 @@ void handleCheckUpdate() {
 
   WiFiClientSecure client;
   client.setInsecure();
+  client.setBufferSizes(1024, 1024);
   client.setTimeout(10000);
 
   HTTPClient http;
@@ -732,6 +733,7 @@ void handleStartUpdate() {
 
   WiFiClientSecure client;
   client.setInsecure();
+  client.setBufferSizes(1024, 1024);
   ESPhttpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   
   t_httpUpdate_return ret = ESPhttpUpdate.update(client, binUrl);

@@ -297,7 +297,8 @@ void WebServerManager::begin() {
 
     server.on("/wifi/save", HTTP_POST, [this]() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
-        if (!checkAuthAdmin()) return;
+        // Permite salvar sem token se o ESP estiver em modo AP (Portal de Configuração)
+        if (!sysMgr.isAPMode() && !checkAuthAdmin()) return;
         String newSSID = server.hasArg("ssid") ? server.arg("ssid") : "";
         String newPass = server.hasArg("password") ? server.arg("password") : "";
 

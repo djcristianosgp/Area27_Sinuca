@@ -281,3 +281,84 @@ bool StorageManager::saveHistory(MatchHistoryItem history[], int historyCount) {
     
     return writeAtomic("/matches.json", doc);
 }
+String StorageManager::exportBackup() {
+    JsonDocument doc;
+    
+    // Players
+    JsonArray playersArr = doc["players"].to<JsonArray>();
+    Player tempPlayers[50];
+    int playerCount = 0, nextId = 1;
+    if (loadPlayers(tempPlayers, playerCount, nextId)) {
+        for (int i = 0; i < playerCount; i++) {
+            JsonObject p = playersArr.add<JsonObject>();
+            p["id"] = tempPlayers[i].id;
+            p["nome"] = tempPlayers[i].nome;
+            p["telefone"] = tempPlayers[i].telefone;
+            p["senha"] = tempPlayers[i].senha;
+            p["elo"] = tempPlayers[i].elo;
+            p["vitorias"] = tempPlayers[i].vitorias;
+            p["derrotas"] = tempPlayers[i].derrotas;
+            p["peak_elo"] = tempPlayers[i].peak_elo;
+            p["max_win_streak"] = tempPlayers[i].max_win_streak;
+            p["current_streak"] = tempPlayers[i].current_streak;
+            p["titles_count"] = tempPlayers[i].titles_count;
+            p["shutout_count"] = tempPlayers[i].shutout_count;
+        }
+    }
+    
+    // History
+    JsonArray historyArr = doc["history"].to<JsonArray>();
+    MatchHistoryItem tempHistory[50];
+    int historyCount = 0;
+    if (loadHistory(tempHistory, historyCount)) {
+        for (int i = 0; i < historyCount; i++) {
+            JsonObject m = historyArr.add<JsonObject>();
+            m["id"] = tempHistory[i].id;
+            m["matchType"] = tempHistory[i].matchType;
+            m["p1_id"] = tempHistory[i].p1_id;
+            m["p2_id"] = tempHistory[i].p2_id;
+            m["winner_id"] = tempHistory[i].winner_id;
+            m["loser_balls"] = tempHistory[i].loser_balls;
+            m["elo_delta"] = tempHistory[i].elo_delta;
+            m["date_str"] = tempHistory[i].date_str;
+        }
+    }
+    
+    // Seasons (read from WebServerManager's global if possible, but they are in WebServerManager.cpp)
+    // For now we will assume WebServerManager handles seasons, so let's just create an empty array 
+    // or we can read a file if it exists. Actually, seasons are only in WebServerManager memory.
+    // Let's just create a basic structure.
+    
+    String output;
+    serializeJson(doc, output);
+    return output;
+}
+
+bool StorageManager::importBackup(const String& payload) {
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (error) {
+        Serial.println("Import Backup: erro de parsing JSON");
+        return false;
+    }
+    
+    if (!doc.containsKey("players") || !doc.containsKey("history")) {
+        Serial.println("Import Backup: JSON invalido");
+        return false;
+    }
+    
+    // Escrever atômico players
+    JsonDocument docPlayers;
+    docPlayers["schema_version"] = 2;
+    docPlayers["players"] = doc["players"];
+    if (!writeAtomic("/players.json", docPlayers)) return false;
+    
+    // Escrever atômico history
+    JsonDocument docHistory;
+    docHistory["schema_version"] = 2;
+    docHistory["history"] = doc["history"];
+    if (!writeAtomic("/matches.json", docHistory)) return false;
+    
+    return true;
+}

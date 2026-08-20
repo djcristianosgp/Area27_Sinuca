@@ -155,22 +155,29 @@ void WebServerManager::begin() {
 
     server.on("/api/v1/backup/export", HTTP_GET, [this]() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
-        String json = "{\n";
-        json += "  \"version\": 2.0,\n";
-        json += "  \"timestamp\": " + String(millis()) + ",\n";
-        json += "  \"playerMgr.players\": " + playerMgr.getPlayersJSON() + ",\n";
-        json += "  \"history\": " + matchMgr.getHistoryJSON() + "\n";
-        json += "}";
+        if (!checkAuthAdmin()) return;
+        
+        String json = storage.exportBackup();
         server.send(200, "application/json", json);
     });
 
     server.on("/api/v1/backup/import", HTTP_POST, [this]() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
-        if (!server.hasArg("plain")) {
-            server.send(400, "application/json", "{\"error\":\"Body de backup ausente\"}");
-            return;
+        if (!checkAuthAdmin()) return;
+        
+        if (server.hasArg("plain")) {
+            String payload = server.arg("plain");
+            if (storage.importBackup(payload)) {
+                // Reload memory state
+                playerMgr.begin();
+                matchMgr.begin();
+                server.send(200, "application/json", "{\"success\":true,\"message\":\"Backup importado com sucesso\"}");
+            } else {
+                server.send(400, "application/json", "{\"error\":\"Falha ao processar arquivo de backup\"}");
+            }
+        } else {
+            server.send(400, "application/json", "{\"error\":\"Payload ausente\"}");
         }
-        server.send(200, "application/json", "{\"success\":true,\"message\":\"Backup restaurado com sucesso!\"}");
     });
 
     server.on("/api/v1/update/check", HTTP_GET, [this]() {

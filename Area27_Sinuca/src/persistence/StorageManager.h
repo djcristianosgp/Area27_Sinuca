@@ -23,6 +23,9 @@ public:
     
     bool loadHistory(MatchHistoryItem history[], int& historyCount);
     bool saveHistory(MatchHistoryItem history[], int historyCount);
+    
+    String exportBackup();
+    bool importBackup(const String& payload);
 };
 
 extern StorageManager storage;

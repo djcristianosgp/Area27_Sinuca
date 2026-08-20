@@ -2710,6 +2710,426 @@ function advanceBracketWinner(rIdx, mIdx, slotNum) {
   renderChampionshipBracket(activeChampionshipData);
 }
 
+/**
+ * Page: Modo Partida (match.html)
+ */
+let matchPollingInterval = null;
+let currentMatchData = null;
+let allPlayersCache = [];
+
+function switchGuardTab(tab) {
+  const regForm = document.getElementById('guard-form-register');
+  const loginForm = document.getElementById('guard-form-login');
+  const regBtn = document.getElementById('guard-tab-register');
+  const loginBtn = document.getElementById('guard-tab-login');
+
+  if (!regForm || !loginForm) return;
+
+  if (tab === 'register') {
+    regForm.classList.remove('hidden');
+    loginForm.classList.add('hidden');
+    if (regBtn) regBtn.classList.add('active');
+    if (loginBtn) loginBtn.classList.remove('active');
+  } else {
+    regForm.classList.add('hidden');
+    loginForm.classList.remove('hidden');
+    if (regBtn) regBtn.classList.remove('active');
+    if (loginBtn) loginBtn.classList.add('active');
+  }
+}
+
+function switchMatchTab(tab) {
+  const createCard = document.getElementById('card-create-match');
+  const joinCard = document.getElementById('card-join-match');
+  const createBtn = document.getElementById('tab-btn-create-match');
+  const joinBtn = document.getElementById('tab-btn-join-match');
+
+  if (!createCard || !joinCard) return;
+
+  if (tab === 'create') {
+    createCard.classList.remove('hidden');
+    joinCard.classList.add('hidden');
+    if (createBtn) createBtn.classList.add('active');
+    if (joinBtn) joinBtn.classList.remove('active');
+  } else {
+    createCard.classList.add('hidden');
+    joinCard.classList.remove('hidden');
+    if (createBtn) createBtn.classList.remove('active');
+    if (joinBtn) joinBtn.classList.add('active');
+  }
+}
+
+function handleMatchTypeChange() {
+  const typeSelect = document.getElementById('match-type-select');
+  const container = document.getElementById('dynamic-invites-container');
+  if (!typeSelect || !container) return;
+
+  const matchType = typeSelect.value;
+  const user = getCurrentUser();
+  const availablePlayers = allPlayersCache.filter(p => !user || p.id !== user.id);
+
+  let html = '';
+  if (matchType === 'par_impar_2p') {
+    html = `
+      <div class="form-group">
+        <label class="form-label" for="invite-player-b">Adversário (Jogador B) *</label>
+        <select id="invite-player-b" class="form-select" required>
+          <option value="">Selecione o adversário...</option>
+          ${availablePlayers.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+        </select>
+      </div>
+    `;
+  } else if (matchType === 'par_impar_4p') {
+    html = `
+      <div class="form-group">
+        <label class="form-label" for="invite-player-b">Seu Parceiro (Jogador B - Time 1) *</label>
+        <select id="invite-player-b" class="form-select" required>
+          <option value="">Selecione seu parceiro...</option>
+          ${availablePlayers.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="invite-player-c">Adversário 1 (Jogador C - Time 2) *</label>
+        <select id="invite-player-c" class="form-select" required>
+          <option value="">Selecione adversário 1...</option>
+          ${availablePlayers.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="invite-player-d">Adversário 2 (Jogador D - Time 2) *</label>
+        <select id="invite-player-d" class="form-select" required>
+          <option value="">Selecione adversário 2...</option>
+          ${availablePlayers.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+        </select>
+      </div>
+    `;
+  } else if (matchType === '5_bolas_3p') {
+    html = `
+      <div class="form-group">
+        <label class="form-label" for="invite-player-b">Jogador 2 *</label>
+        <select id="invite-player-b" class="form-select" required>
+          <option value="">Selecione o jogador 2...</option>
+          ${availablePlayers.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="invite-player-c">Jogador 3 *</label>
+        <select id="invite-player-c" class="form-select" required>
+          <option value="">Selecione o jogador 3...</option>
+          ${availablePlayers.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.elo || 1000} ELO)</option>`).join('')}
+        </select>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
+function selectBalls(count) {
+  const hiddenInput = document.getElementById('loser-balls-input');
+  if (hiddenInput) hiddenInput.value = count;
+
+  const opts = document.querySelectorAll('#balls-grid-container .ball-opt');
+  opts.forEach((btn, idx) => {
+    if (idx === count) btn.classList.add('selected');
+    else btn.classList.remove('selected');
+  });
+}
+
+function openFinishModal() {
+  const modal = document.getElementById('modal-finish-match');
+  const winnerSelect = document.getElementById('finish-winner-select');
+  if (!modal || !winnerSelect) return;
+
+  if (currentMatchData && currentMatchData.players) {
+    const activePlayers = currentMatchData.players.filter(p => p.id > 0);
+    winnerSelect.innerHTML = '<option value="">Selecione o Vencedor</option>' +
+      activePlayers.map(p => `<option value="${p.id}">🏆 ${escapeHtml(p.nome)}</option>`).join('');
+  }
+
+  selectBalls(0);
+  modal.classList.remove('hidden');
+  modal.scrollIntoView({ behavior: 'smooth' });
+}
+
+function closeFinishModal() {
+  const modal = document.getElementById('modal-finish-match');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function cancelCurrentMatch() {
+  if (!confirm('Deseja realmente cancelar e encerrar a partida atual?')) return;
+  try {
+    await API.cancelMatch();
+    showToast('Partida cancelada com sucesso.', 'success');
+    closeFinishModal();
+    await checkActiveMatchState();
+  } catch (err) {}
+}
+
+async function respondInvite(accepted) {
+  const user = getCurrentUser();
+  if (!user) return;
+  try {
+    await API.respondMatchInvite({
+      playerId: user.id,
+      action: accepted ? 'accept' : 'reject'
+    });
+    showToast(accepted ? 'Convite aceito! Você está na partida.' : 'Convite recusado.', 'success');
+    await checkActiveMatchState();
+  } catch (err) {}
+}
+
+async function checkActiveMatchState() {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  const authGuard = document.getElementById('match-auth-guard');
+  const matchArena = document.getElementById('match-arena');
+  const inviteCard = document.getElementById('invite-pending-card');
+  const activePanel = document.getElementById('active-match-panel');
+  const lobbyPanel = document.getElementById('match-lobby');
+
+  if (authGuard) authGuard.classList.add('hidden');
+  if (matchArena) matchArena.classList.remove('hidden');
+
+  try {
+    const match = await API.getActiveMatch();
+    currentMatchData = match;
+
+    if (!match || !match.active) {
+      if (inviteCard) inviteCard.classList.add('hidden');
+      if (activePanel) activePanel.classList.add('hidden');
+      if (lobbyPanel) lobbyPanel.classList.remove('hidden');
+      return;
+    }
+
+    // Match is active
+    const mySlot = (match.players || []).find(p => p.id === user.id);
+    const hasPendingInvite = mySlot && mySlot.invite === 'pending';
+
+    if (hasPendingInvite) {
+      if (inviteCard) inviteCard.classList.remove('hidden');
+      const bannerText = document.getElementById('invite-banner-text');
+      if (bannerText) bannerText.textContent = `Você foi convidado para a partida [${match.code}]!`;
+    } else {
+      if (inviteCard) inviteCard.classList.add('hidden');
+    }
+
+    if (lobbyPanel) lobbyPanel.classList.add('hidden');
+    if (activePanel) activePanel.classList.remove('hidden');
+
+    // Update Room Code & Type
+    const codeEl = document.getElementById('active-room-code');
+    if (codeEl) codeEl.textContent = match.code || '----';
+
+    const typeBadge = document.getElementById('active-match-type-badge');
+    if (typeBadge) {
+      const typeLabels = {
+        'par_impar_2p': '🎱 PAR OU ÍMPAR (INDIVIDUAL - 2P)',
+        'par_impar_4p': '👥 PAR OU ÍMPAR (DUPLA - 4P)',
+        '5_bolas_3p': '🖐️ 5 BOLAS (3P)'
+      };
+      typeBadge.textContent = typeLabels[match.matchType] || match.matchType.toUpperCase();
+    }
+
+    // Render Roster
+    const rosterContainer = document.getElementById('active-roster-container');
+    if (rosterContainer && match.players) {
+      rosterContainer.innerHTML = match.players.map(p => {
+        let inviteBadge = '';
+        if (p.invite === 'creator') inviteBadge = '<span style="color: var(--gold); font-weight: 700;">👑 Criador</span>';
+        else if (p.invite === 'accepted') inviteBadge = '<span style="color: #4ade80; font-weight: 700;">✅ Confirmado</span>';
+        else if (p.invite === 'pending') inviteBadge = '<span style="color: #fbbf24; font-weight: 700;">⏳ Aguardando</span>';
+        else inviteBadge = '<span style="color: var(--text-muted);">👤 Vaga Livre</span>';
+
+        return `
+          <div class="list-item">
+            <div class="player-info">
+              <span class="player-name">${escapeHtml(p.nome)}</span>
+              <span style="font-size: 0.8rem; color: var(--primary);">${p.id > 0 ? (p.elo || 1000) + ' ELO' : ''}</span>
+            </div>
+            <div>${inviteBadge}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Status Message & Finish Button State
+    const statusMsg = document.getElementById('match-status-msg');
+    const finishBtn = document.getElementById('btn-open-finish-modal');
+
+    if (match.status === 'in_progress') {
+      if (statusMsg) {
+        statusMsg.innerHTML = '🎱 <strong style="color: #4ade80;">Partida em andamento!</strong> Todos os jogadores confirmaram.';
+      }
+      if (finishBtn) finishBtn.disabled = false;
+    } else {
+      if (statusMsg) {
+        statusMsg.innerHTML = '⏳ <span style="color: var(--gold);">Aguardando todos os jogadores aceitarem os convites ou entrarem pelo código...</span>';
+      }
+      if (finishBtn) finishBtn.disabled = true;
+    }
+
+  } catch (err) {
+    console.error('Erro ao verificar partida ativa:', err);
+  }
+}
+
+async function initMatchPage() {
+  const user = getCurrentUser();
+  const authGuard = document.getElementById('match-auth-guard');
+  const matchArena = document.getElementById('match-arena');
+
+  // Load all registered players for invite selectors and guard login dropdown
+  try {
+    allPlayersCache = await API.getPlayers();
+  } catch (e) {
+    allPlayersCache = [];
+  }
+
+  // Setup Guard Login Dropdown
+  const guardLoginSelect = document.getElementById('guard-login-select');
+  if (guardLoginSelect && allPlayersCache.length > 0) {
+    guardLoginSelect.innerHTML = '<option value="">Selecione seu Perfil...</option>' +
+      allPlayersCache.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${p.telefone})</option>`).join('');
+  }
+
+  // Auth Guard forms
+  const guardFormRegister = document.getElementById('guard-form-register');
+  if (guardFormRegister) {
+    guardFormRegister.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nome = document.getElementById('guard-nome').value.trim();
+      const telefone = document.getElementById('guard-telefone').value.trim();
+      const senha = document.getElementById('guard-senha').value.trim();
+
+      try {
+        const res = await API.registerPlayer({ nome, telefone, senha });
+        showToast('Cadastro realizado com sucesso!', 'success');
+        setCurrentUser({ id: res.id, nome: res.nome, telefone: res.telefone });
+        window.location.reload();
+      } catch (err) {}
+    });
+  }
+
+  const guardFormLogin = document.getElementById('guard-form-login');
+  if (guardFormLogin) {
+    guardFormLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const selId = guardLoginSelect ? guardLoginSelect.value : '';
+      const telefone = document.getElementById('guard-login-telefone').value.trim();
+      const senha = document.getElementById('guard-login-senha').value.trim();
+
+      try {
+        const res = await API.loginPlayer({ id: Number(selId) || 0, telefone, senha });
+        if (res.token) res.player.token = res.token;
+        showToast(`Bem-vindo, ${res.player.nome}!`, 'success');
+        setCurrentUser(res.player);
+        window.location.reload();
+      } catch (err) {}
+    });
+  }
+
+  if (!user) {
+    if (authGuard) authGuard.classList.remove('hidden');
+    if (matchArena) matchArena.classList.add('hidden');
+    return;
+  }
+
+  // Logged-in view
+  if (authGuard) authGuard.classList.add('hidden');
+  if (matchArena) matchArena.classList.remove('hidden');
+
+  const creatorNameDisplay = document.getElementById('current-player-name-display');
+  if (creatorNameDisplay) {
+    creatorNameDisplay.textContent = `👤 ${user.nome} (Você)`;
+  }
+
+  handleMatchTypeChange();
+
+  // Create Match Form
+  const formCreateMatch = document.getElementById('form-create-match');
+  if (formCreateMatch) {
+    formCreateMatch.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const matchType = document.getElementById('match-type-select').value;
+      const playerBSelect = document.getElementById('invite-player-b');
+      const playerB = playerBSelect ? Number(playerBSelect.value) : 0;
+
+      try {
+        const res = await API.createMatch({
+          matchType: matchType,
+          playerA: user.id,
+          playerB: playerB
+        });
+        showToast(`Partida criada! Código: ${res.code || ''}`, 'success');
+        await checkActiveMatchState();
+      } catch (err) {}
+    });
+  }
+
+  // Join Match by Code Form
+  const formJoinMatch = document.getElementById('form-join-match');
+  if (formJoinMatch) {
+    formJoinMatch.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('input-join-code').value.trim();
+      if (!code) return;
+
+      try {
+        await API.joinMatch({
+          code: code,
+          playerId: user.id
+        });
+        showToast('Você entrou na sala com sucesso!', 'success');
+        formJoinMatch.reset();
+        await checkActiveMatchState();
+      } catch (err) {}
+    });
+  }
+
+  // Finish Match Form
+  const formFinish = document.getElementById('form-finish-match');
+  if (formFinish) {
+    formFinish.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const winnerId = Number(document.getElementById('finish-winner-select').value);
+      const loserBallsInput = document.getElementById('loser-balls-input');
+      const loserBalls = loserBallsInput ? Number(loserBallsInput.value || 0) : 0;
+
+      if (!winnerId) {
+        showToast('Selecione o jogador vencedor', 'error');
+        return;
+      }
+
+      try {
+        await API.finishMatch({
+          winner_id: winnerId,
+          loser_balls: loserBalls
+        });
+        showToast('🏆 Partida finalizada com sucesso! Ranking atualizado.', 'success');
+        closeFinishModal();
+        await checkActiveMatchState();
+      } catch (err) {}
+    });
+  }
+
+  // Initial check & polling
+  await checkActiveMatchState();
+  if (matchPollingInterval) clearInterval(matchPollingInterval);
+  matchPollingInterval = setInterval(checkActiveMatchState, 3000);
+}
+
+// Global exposes for inline HTML onclick attributes
+window.switchGuardTab = switchGuardTab;
+window.switchMatchTab = switchMatchTab;
+window.handleMatchTypeChange = handleMatchTypeChange;
+window.selectBalls = selectBalls;
+window.openFinishModal = openFinishModal;
+window.closeFinishModal = closeFinishModal;
+window.cancelCurrentMatch = cancelCurrentMatch;
+window.respondInvite = respondInvite;
+
 async function promptLoginForUser(id, nome) {
   const senha = prompt(`Digite a senha PIN (4 dígitos) para logar como ${nome}:`);
   if (senha === null) return;
@@ -3154,6 +3574,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('profile-name')) initPlayerProfile();
   if (document.getElementById('hall-peak-elo')) initHallOfFame();
   if (document.getElementById('bracket-view')) initChampionship();
+  if (document.getElementById('form-create-match') || document.getElementById('match-arena') || document.getElementById('match-auth-guard')) initMatchPage();
   if (document.getElementById('form-player') || document.getElementById('form-login')) initPlayersPage();
   if (document.getElementById('ranking-container')) initRankingPage();
   if (document.getElementById('admin-pin-card') || document.getElementById('btn-reset-wifi')) initSettingsPage();

@@ -24,10 +24,11 @@ jobs:
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      - name: Install ESP8266 Board Core
+      - name: Install ESP8266 Board Core and Libraries
         run: |
           arduino-cli core update-index --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
           arduino-cli core install esp8266:esp8266 --additional-urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli lib install ArduinoJson
 
       - name: Compile ESP8266 Firmware
         run: |

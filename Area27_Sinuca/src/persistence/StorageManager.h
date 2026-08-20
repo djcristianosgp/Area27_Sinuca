@@ -12,17 +12,17 @@ class StorageManager {
 private:
     bool writeAtomic(const char* filepath, JsonDocument& doc);
     bool readJson(const char* filepath, JsonDocument& doc);
-    void migrateLegacyPlayers(const String& content);
+    void migrateLegacyPlayers(const String& content, Player players[], int& playerCount, int& nextPlayerId);
     void createBackup(const char* filepath);
 
 public:
     bool begin();
     
-    bool loadPlayers();
-    bool savePlayers();
+    bool loadPlayers(Player players[], int& playerCount, int& nextPlayerId);
+    bool savePlayers(Player players[], int playerCount);
     
-    bool loadHistory();
-    bool saveHistory();
+    bool loadHistory(MatchHistoryItem history[], int& historyCount);
+    bool saveHistory(MatchHistoryItem history[], int historyCount);
 };
 
 extern StorageManager storage;

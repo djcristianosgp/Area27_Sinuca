@@ -5,13 +5,6 @@
 
 StorageManager storage;
 
-extern Player players[];
-extern int playerCount;
-extern int nextPlayerId;
-extern MatchHistoryItem matchHistory[];
-extern int matchHistoryCount;
-extern const int MAX_PLAYERS_LIMIT;
-
 bool StorageManager::begin() {
     return LittleFS.begin();
 }
@@ -74,7 +67,7 @@ bool StorageManager::readJson(const char* filepath, JsonDocument& doc) {
     return true;
 }
 
-void StorageManager::migrateLegacyPlayers(const String& content) {
+void StorageManager::migrateLegacyPlayers(const String& content, Player players[], int& playerCount, int& nextPlayerId) {
     playerCount = 0;
     int searchPos = 0;
     while (playerCount < 50) { // MAX_PLAYERS
@@ -149,14 +142,14 @@ void StorageManager::migrateLegacyPlayers(const String& content) {
 
         searchPos = derEnd;
     }
-    savePlayers(); // Save to new schema
+    savePlayers(players, playerCount); // Save to new schema
 }
 
-bool StorageManager::loadPlayers() {
+bool StorageManager::loadPlayers(Player players[], int& playerCount, int& nextPlayerId) {
     if (!LittleFS.exists("/players.json")) {
         playerCount = 0;
         nextPlayerId = 1;
-        return savePlayers();
+        return savePlayers(players, playerCount);
     }
     
     // Read raw to check schema
@@ -169,7 +162,7 @@ bool StorageManager::loadPlayers() {
     content.trim();
     if (content.startsWith("[")) {
         // Legacy
-        migrateLegacyPlayers(content);
+        migrateLegacyPlayers(content, players, playerCount, nextPlayerId);
         return true;
     }
     
@@ -207,7 +200,7 @@ bool StorageManager::loadPlayers() {
     return true;
 }
 
-bool StorageManager::savePlayers() {
+bool StorageManager::savePlayers(Player players[], int playerCount) {
     JsonDocument doc;
     doc["schema_version"] = 2;
     JsonArray arr = doc["players"].to<JsonArray>();
@@ -231,9 +224,9 @@ bool StorageManager::savePlayers() {
     return writeAtomic("/players.json", doc);
 }
 
-bool StorageManager::loadHistory() {
+bool StorageManager::loadHistory(MatchHistoryItem history[], int& historyCount) {
     if (!LittleFS.exists("/matches.json")) {
-        matchHistoryCount = 0;
+        historyCount = 0;
         return true;
     }
     
@@ -245,45 +238,45 @@ bool StorageManager::loadHistory() {
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, content);
     if (error) {
-        matchHistoryCount = 0;
+        historyCount = 0;
         return false;
     }
     
     int version = doc["schema_version"] | 1;
     if (version >= 2) {
         JsonArray arr = doc["history"].as<JsonArray>();
-        matchHistoryCount = 0;
+        historyCount = 0;
         for (JsonObject m : arr) {
-            if (matchHistoryCount >= 50) break;
-            matchHistory[matchHistoryCount].id = m["id"];
-            matchHistory[matchHistoryCount].matchType = m["matchType"].as<String>();
-            matchHistory[matchHistoryCount].p1_id = m["p1_id"];
-            matchHistory[matchHistoryCount].p2_id = m["p2_id"];
-            matchHistory[matchHistoryCount].winner_id = m["winner_id"];
-            matchHistory[matchHistoryCount].loser_balls = m["loser_balls"];
-            matchHistory[matchHistoryCount].elo_delta = m["elo_delta"];
-            matchHistory[matchHistoryCount].date_str = m["date_str"].as<String>();
-            matchHistoryCount++;
+            if (historyCount >= 50) break;
+            history[historyCount].id = m["id"];
+            history[historyCount].matchType = m["matchType"].as<String>();
+            history[historyCount].p1_id = m["p1_id"];
+            history[historyCount].p2_id = m["p2_id"];
+            history[historyCount].winner_id = m["winner_id"];
+            history[historyCount].loser_balls = m["loser_balls"];
+            history[historyCount].elo_delta = m["elo_delta"];
+            history[historyCount].date_str = m["date_str"].as<String>();
+            historyCount++;
         }
     }
     return true;
 }
 
-bool StorageManager::saveHistory() {
+bool StorageManager::saveHistory(MatchHistoryItem history[], int historyCount) {
     JsonDocument doc;
     doc["schema_version"] = 2;
     JsonArray arr = doc["history"].to<JsonArray>();
     
-    for (int i = 0; i < matchHistoryCount; i++) {
+    for (int i = 0; i < historyCount; i++) {
         JsonObject m = arr.add<JsonObject>();
-        m["id"] = matchHistory[i].id;
-        m["matchType"] = matchHistory[i].matchType;
-        m["p1_id"] = matchHistory[i].p1_id;
-        m["p2_id"] = matchHistory[i].p2_id;
-        m["winner_id"] = matchHistory[i].winner_id;
-        m["loser_balls"] = matchHistory[i].loser_balls;
-        m["elo_delta"] = matchHistory[i].elo_delta;
-        m["date_str"] = matchHistory[i].date_str;
+        m["id"] = history[i].id;
+        m["matchType"] = history[i].matchType;
+        m["p1_id"] = history[i].p1_id;
+        m["p2_id"] = history[i].p2_id;
+        m["winner_id"] = history[i].winner_id;
+        m["loser_balls"] = history[i].loser_balls;
+        m["elo_delta"] = history[i].elo_delta;
+        m["date_str"] = history[i].date_str;
     }
     
     return writeAtomic("/matches.json", doc);

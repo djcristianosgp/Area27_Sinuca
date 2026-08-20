@@ -53,11 +53,35 @@ function renderUserHeaderStatus() {
 const API = {
   async request(endpoint, options = {}) {
     try {
+      const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+      
+      const adminToken = localStorage.getItem('area27_admin_token');
+      const user = getCurrentUser();
+      
+      // Inject token - admin takes precedence for admin endpoints, otherwise use user token
+      if (adminToken && endpoint.includes('/settings') || endpoint.includes('/reset')) {
+          headers['Authorization'] = 'Bearer ' + adminToken;
+      } else if (user && user.token) {
+          headers['Authorization'] = 'Bearer ' + user.token;
+      } else if (adminToken) {
+          headers['Authorization'] = 'Bearer ' + adminToken; // Fallback
+      }
+
       const response = await fetch(endpoint, {
-        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        headers: headers,
         ...options
       });
       const data = await response.json();
+      
+      if (response.status === 401) {
+          if (endpoint.includes('settings')) {
+              localStorage.removeItem('area27_admin_token');
+              showToast('Sessão administrativa expirada.', 'error');
+          } else {
+              logoutUser();
+          }
+      }
+      
       if (!response.ok) {
         throw new Error(data.error || `Erro na requisição: ${response.status}`);
       }
@@ -616,6 +640,7 @@ async function promptLoginForUser(id, nome) {
   try {
     const res = await API.loginPlayer({ id: Number(id), senha: senha.trim() });
     if (res && res.player) {
+      if (res.token) res.player.token = res.token;
       setCurrentUser(res.player);
       showToast(`Bem-vindo, ${res.player.nome}!`, 'success');
     }
@@ -710,6 +735,7 @@ async function initPlayersPage() {
 
       try {
         const res = await API.loginPlayer({ id: Number(id) || 0, telefone, senha });
+        if (res.token) res.player.token = res.token;
         showToast(`Bem-vindo, ${res.player.nome}!`, 'success');
         setCurrentUser(res.player);
         setTimeout(() => window.location.href = 'index.html', 800);
@@ -788,7 +814,10 @@ function initSettingsPage() {
       const pin = pinInput ? pinInput.value.trim() : '';
 
       try {
-        await API.authSettingsPin({ pin });
+        const res = await API.authSettingsPin({ pin });
+        if (res && res.token) {
+            localStorage.setItem('area27_admin_token', res.token);
+        }
         sessionStorage.setItem('area27_admin_auth', 'true');
         showToast('Acesso administrativo liberado com sucesso!', 'success');
         adminCard.classList.add('hidden');
